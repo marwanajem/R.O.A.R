@@ -46,13 +46,13 @@ export default function FeesPayment() {
 
       try {
         
-        const eventRes = await fetch(`https://api.roarchampionship.com/api/events/${id}`)
+        const eventRes = await fetch(`/api/auth/login/api/events/${id}`)
         if (eventRes.ok) setEvent(await eventRes.json())
 
        
         const [compRes, teamRes] = await Promise.all([
-          fetch(`https://api.roarchampionship.com/api/competitors/event/${id}/club/${user.clubCode}`),
-          fetch(`https://api.roarchampionship.com/api/teams/event/${id}/club/${user.clubCode}`)
+          fetch(`/api/auth/login/api/competitors/event/${id}/club/${user.clubCode}`),
+          fetch(`/api/auth/login/api/teams/event/${id}/club/${user.clubCode}`)
         ])
 
         if (compRes.ok) setCompetitors(await compRes.json())

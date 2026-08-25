@@ -72,11 +72,11 @@ export default function EditCompetitor() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const eventRes = await fetch(`https://api.roarchampionship.com/api/events/${id}`)
+        const eventRes = await fetch(`/api/auth/login/api/events/${id}`)
         if (eventRes.ok) setEvent(await eventRes.json())
 
         if (user?.clubCode) {
-          const rosterRes = await fetch(`https://api.roarchampionship.com/api/competitors/event/${id}/club/${user.clubCode}`)
+          const rosterRes = await fetch(`/api/auth/login/api/competitors/event/${id}/club/${user.clubCode}`)
           if (rosterRes.ok) {
             const rosterData = await rosterRes.json()
             
@@ -136,7 +136,7 @@ export default function EditCompetitor() {
       }
 
       
-      const response = await fetch(`https://api.roarchampionship.com/api/competitors/${cid}`, {
+      const response = await fetch(`/api/auth/login/api/competitors/${cid}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)

@@ -38,7 +38,7 @@ export default function EventHome() {
     const fetchDashboardData = async () => {
       try {
        
-        const eventRes = await fetch(`https://api.roarchampionship.com/api/events/${id}`)
+        const eventRes = await fetch(`/api/auth/login/api/events/${id}`)
         if (!eventRes.ok) throw new Error('Event not found')
         const eventData = await eventRes.json()
 
@@ -54,7 +54,7 @@ export default function EventHome() {
 
         
         if (user?.clubCode) {
-          const rosterRes = await fetch(`https://api.roarchampionship.com/api/competitors/event/${id}/club/${user.clubCode}`)
+          const rosterRes = await fetch(`/api/auth/login/api/competitors/event/${id}/club/${user.clubCode}`)
           if (rosterRes.ok) {
             const rosterData = await rosterRes.json()
             setMyCompetitors(rosterData)
@@ -62,14 +62,14 @@ export default function EventHome() {
         
         if (user?.clubCode) {
           
-          const rosterRes = await fetch(`https://api.roarchampionship.com/api/competitors/event/${id}/club/${user.clubCode}`)
+          const rosterRes = await fetch(`/api/auth/login/api/competitors/event/${id}/club/${user.clubCode}`)
           if (rosterRes.ok) {
             const rosterData = await rosterRes.json()
             setMyCompetitors(rosterData)
           }
 
           //Teams/Pairs
-          const teamRes = await fetch(`https://api.roarchampionship.com/api/teams/event/${id}/club/${user.clubCode}`)
+          const teamRes = await fetch(`/api/auth/login/api/teams/event/${id}/club/${user.clubCode}`)
           if (teamRes.ok) {
             const teamData = await teamRes.json()
             setMyTeams(teamData)
