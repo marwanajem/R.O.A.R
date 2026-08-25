@@ -1,0 +1,68 @@
+/**
+ * MOCK DATA — temporary until backend is ready.
+ * BACKEND: delete this file and replace all imports with fetch('/api/events/:id/teams').
+ */
+export const teams = [
+  {
+    id: 'T-001',
+    eventId: 'EVT-2026-001',
+    name: 'Tiger KL — Team Pattern A',
+    category: 'Team Pattern',
+    ageCategory: '18+',
+    beltGroup: 'BB',
+    gender: 'Mixed',
+    clubCode: 'TIGERKL',
+    clubName: 'Tiger Taekwondo KL',
+    members: ['C-001', 'C-007', 'C-014'],
+    slotsFilled: 3,
+    slotsRequired: 3,
+    status: 'complete',
+  },
+  {
+    id: 'T-002',
+    eventId: 'EVT-2026-001',
+    name: 'Eagle PJ — Team Sparring Cadet M',
+    category: 'Team Sparring',
+    ageCategory: '9-11',
+    beltGroup: 'CB',
+    gender: 'M',
+    clubCode: 'EAGLEPH',
+    clubName: 'Eagle Academy Petaling Jaya',
+    members: ['C-009', 'C-005'],
+    slotsFilled: 2,
+    slotsRequired: 3,
+    status: 'incomplete',
+  },
+  {
+    id: 'T-003',
+    eventId: 'EVT-2026-001',
+    name: 'Dragon SS — Pair Pattern F',
+    category: 'Pair Pattern',
+    ageCategory: '12-14',
+    beltGroup: 'CB',
+    gender: 'F',
+    clubCode: 'DRAONSS',
+    clubName: 'Dragon Spirit Seremban',
+    members: ['C-004', 'C-012'],
+    slotsFilled: 2,
+    slotsRequired: 2,
+    status: 'complete',
+  },
+  {
+    id: 'T-004',
+    eventId: 'EVT-2026-001',
+    name: 'Phoenix KK — Team Pattern Senior',
+    category: 'Team Pattern',
+    ageCategory: '18+',
+    beltGroup: 'BB-senior',
+    gender: 'Mixed',
+    clubCode: 'PHOENIXKK',
+    clubName: 'Phoenix Taekwondo Kota Kinabalu',
+    members: ['C-014'],
+    slotsFilled: 1,
+    slotsRequired: 3,
+    status: 'incomplete',
+  },
+]
+
+export const getTeamsByEvent = (eventId) => teams.filter((t) => t.eventId === eventId)
