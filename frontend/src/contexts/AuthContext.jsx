@@ -3,7 +3,7 @@ import React, { createContext, useContext, useState, useCallback } from 'react'
 const AuthContext = createContext(null)
 
 
-const API_URL = '[https://roarchampionship.com](https://roarchampionship.com)/api/auth'
+const API_URL = 'https://api.roarchampionship.com/api/auth'
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {

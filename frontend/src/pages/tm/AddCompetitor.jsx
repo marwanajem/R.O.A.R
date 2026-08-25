@@ -127,7 +127,7 @@ export default function AddCompetitor() {
       }
 
       
-      const response = await fetch('[https://roarchampionship.com](https://roarchampionship.com)/api/competitors', {
+      const response = await fetch('https://api.roarchampionship.com/api/competitors', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

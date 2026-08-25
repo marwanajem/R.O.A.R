@@ -37,7 +37,7 @@ export default function EventPicker() {
   useEffect(() => {
     const fetchEvents = async () => {
       try {
-        const response = await fetch('[https://roarchampionship.com](https://roarchampionship.com)/api/events')
+        const response = await fetch('https://api.roarchampionship.com/api/events')
         const data = await response.json()
 
         // Map the DB column names to the format the frontend UI expects
