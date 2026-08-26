@@ -35,11 +35,11 @@ export default function TeamBuilder() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const eventRes = await fetch(`/api/auth/login/api/events/${id}`)
+        const eventRes = await fetch(`http://localhost:5001/api/events/${id}`)
         if (eventRes.ok) setEvent(await eventRes.json())
 
         if (user?.clubCode) {
-          const compRes = await fetch(`/api/auth/login/api/competitors/event/${id}/club/${user.clubCode}`)
+          const compRes = await fetch(`http://localhost:5001/api/competitors/event/${id}/club/${user.clubCode}`)
           if (compRes.ok) setMyCompetitors(await compRes.json())
         }
       } catch (error) {
@@ -93,7 +93,7 @@ export default function TeamBuilder() {
       }
 
       
-      const response = await fetch('/api/auth/login/api/teams', {
+      const response = await fetch('http://localhost:5001/api/teams', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)

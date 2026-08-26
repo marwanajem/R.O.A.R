@@ -37,10 +37,10 @@ export default function EventPicker() {
   useEffect(() => {
     const fetchEvents = async () => {
       try {
-        const response = await fetch('/api/auth/login/api/events')
+        const response = await fetch('http://localhost:5001/api/events')
         const data = await response.json()
 
-        // Map the DB column names to the format the frontend UI expects
+        
         const liveEvents = data.map(ev => ({
           id: ev.id,
           name: ev.shortName,
@@ -48,7 +48,7 @@ export default function EventPicker() {
           eventDate: ev.eventDate,
           regEnd: ev.regCloseDate,
           ruleset: ev.type,
-          status: ev.status.toLowerCase(), // Converts DB 'OPEN' to UI 'open'
+          status: ev.status.toLowerCase(),
           fees: {
             individual: ev.individualFee,
             team: ev.teamFee

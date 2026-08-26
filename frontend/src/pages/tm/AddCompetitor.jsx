@@ -127,7 +127,7 @@ export default function AddCompetitor() {
       }
 
       
-      const response = await fetch('/api/auth/login/api/competitors', {
+      const response = await fetch('http://localhost:5001/api/competitors', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

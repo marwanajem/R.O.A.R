@@ -10,10 +10,7 @@ dotenv.config();
 
 const app = express();
 
-app.use(cors({
-  origin: ['https://roarchampionship.com', 'http://localhost:5173'], 
-  credentials: true
-}));
+app.use(cors({ origin: '*' }));
 
 app.use(express.json());
 
@@ -50,9 +47,8 @@ app.get('/api/status', (req, res) => {
 
 
 const PORT = process.env.PORT || 5001;
-
 app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+ app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 });
 
 
