@@ -51,8 +51,8 @@ export default function FeesPayment() {
 
        
         const [compRes, teamRes] = await Promise.all([
-          fetch(`http://localhost:5001/api/competitors/event/${id}/club/${user.clubCode}`),
-          fetch(`http://localhost:5001/api/teams/event/${id}/club/${user.clubCode}`)
+          fetch(`/api/competitors/event/${id}/club/${user.clubCode}`),
+          fetch(`/api/teams/event/${id}/club/${user.clubCode}`)
         ])
 
         if (compRes.ok) setCompetitors(await compRes.json())

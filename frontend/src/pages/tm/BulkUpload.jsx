@@ -174,7 +174,7 @@ export default function BulkUpload() {
         patternFormat: r.data.patternFormat
       }))
 
-      const response = await fetch('http://localhost:5001/api/competitors/bulk', {
+      const response = await fetch('/api/competitors/bulk', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ competitors: payload })
