@@ -47,6 +47,20 @@ app.get('/api/status', (req, res) => {
 
 
 const PORT = process.env.PORT || 5001;
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Serve the compiled React frontend from inside the backend folder
+app.use(express.static(path.join(__dirname, 'dist')));
+
+// Catch-all route using regex /.*/ to prevent the Plesk Express crash
+app.get(/.*/, (req, res) => {
+    res.sendFile(path.join(__dirname, 'dist/index.html'));
+});
+
 app.listen(PORT, () => {
  app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 });
