@@ -118,23 +118,6 @@ export default function Login() {
             Create Team Manager account
           </Link>
         </p>
-
-        <div
-          style={{
-            marginTop: '1.5rem',
-            padding: '0.75rem',
-            background: 'var(--paper-3)',
-            border: '1px solid var(--line)',
-            borderRadius: '3px',
-            fontSize: '0.75rem',
-            color: 'var(--muted)',
-            fontFamily: 'JetBrains Mono, monospace',
-          }}
-        >
-          <div style={{ marginBottom: '0.25rem', color: 'var(--muted-2)', letterSpacing: '0.08em', textTransform: 'uppercase', fontSize: '0.625rem' }}>Demo credentials</div>
-          <div>TM: tm@roar.my / password123</div>
-          <div>Admin: admin@roar.my / admin123</div>
-        </div>
       </div>
     </div>
   )

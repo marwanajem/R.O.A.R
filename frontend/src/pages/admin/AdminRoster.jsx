@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
 import TopBar from '../../components/ui/TopBar'
 import ScopeBar from '../../components/ui/ScopeBar'
@@ -34,7 +34,27 @@ const EXPORT_COLUMNS = [
 export default function AdminRoster() {
   const { id } = useParams()
   const event = getEvent(id)
-  const all = getCompetitorsByEvent(id)
+  
+  const [all, setAll] = useState([])
+
+  useEffect(() => {
+    const fetchRoster = async () => {
+      try {
+
+        const dbEventId = parseInt(id.split('-').pop(), 10);
+        
+        const response = await fetch(`/api/events/${dbEventId}/competitors`);
+        if (response.ok) {
+          const data = await response.json();
+          setAll(data);
+        }
+      } catch (error) {
+        console.error('Failed to fetch roster:', error);
+      }
+    };
+    
+    if (id) fetchRoster();
+  }, [id]);
 
   const [search, setSearch] = useState('')
   const [filterClub, setFilterClub] = useState('')

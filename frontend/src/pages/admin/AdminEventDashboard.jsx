@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
 import TopBar from '../../components/ui/TopBar'
 import ScopeBar from '../../components/ui/ScopeBar'
@@ -24,20 +24,36 @@ function StatCard({ label, value, sub, accent }) {
   )
 }
 
-// Mock payment queue entries
-const PAYMENT_QUEUE = [
-  { id: 'PAY-001', club: 'Tiger Taekwondo KL', clubCode: 'TIGERKL', amount: 720, ref: 'ROAR2026-TIGERKL-20260601', submittedAt: '2026-06-01 14:32', status: 'pending' },
-  { id: 'PAY-002', club: 'Eagle Academy PJ', clubCode: 'EAGLEPH', amount: 540, ref: 'ROAR2026-EAGLEPH-20260602', submittedAt: '2026-06-02 09:15', status: 'pending' },
-  { id: 'PAY-003', club: 'Dragon Spirit SS', clubCode: 'DRAONSS', amount: 480, ref: 'ROAR2026-DRAONSS-20260530', submittedAt: '2026-05-30 11:44', status: 'verified' },
-  { id: 'PAY-004', club: 'Phoenix TKD KK', clubCode: 'PHOENIXKK', amount: 360, ref: 'ROAR2026-PHOENIXKK-20260528', submittedAt: '2026-05-28 16:20', status: 'verified' },
-  { id: 'PAY-005', club: 'Warrior Academy KL', clubCode: 'WARKL', amount: 300, ref: 'ROAR2026-WARKL-20260603', submittedAt: '2026-06-03 08:05', status: 'pending' },
-]
 
 export default function AdminEventDashboard() {
   const { id } = useParams()
   const event = getEvent(id)
   const competitors = getCompetitorsByEvent(id)
-  const [queue, setQueue] = useState(PAYMENT_QUEUE)
+  const [queue, setQueue] = useState([])
+
+  // Fetch real payments from your Node backend when the page loads
+  useEffect(() => {
+    const fetchPayments = async () => {
+      try {
+        // This splits 'EVT-2026-001', takes the last piece ('001'), and turns it into the number 1
+        const dbEventId = parseInt(id.split('-').pop(), 10);
+
+        // Fetch using the real numeric ID
+        const response = await fetch(`api/events/${dbEventId}/payments`);
+        
+        if (response.ok) {
+          const data = await response.json();
+          setQueue(data);
+        }
+      } catch (error) {
+        console.error('Failed to fetch payments:', error);
+      }
+    };
+    
+    if (id) {
+      fetchPayments();
+    }
+  }, [id]);
 
   if (!event) {
     return (

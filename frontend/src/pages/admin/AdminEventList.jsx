@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import TopBar from '../../components/ui/TopBar'
 import SideNav from '../../components/ui/SideNav'
@@ -6,16 +6,71 @@ import PageHead from '../../components/ui/PageHead'
 import Btn from '../../components/ui/Btn'
 import Chip from '../../components/ui/Chip'
 import Stamp from '../../components/ui/Stamp'
-import { events } from '../../data/events'
 import { adminTopNavSections } from '../../utils/navSections'
 
 function statusVariant(status) {
-  if (status === 'open') return 'ok'
-  if (status === 'upcoming') return 'gold'
+  if (!status) return 'default'
+  const s = status.toLowerCase()
+  if (s === 'open') return 'ok'
+  if (s === 'upcoming') return 'gold'
   return 'default'
 }
 
 export default function AdminEventList() {
+  const [events, setEvents] = useState([])
+
+  useEffect(() => {
+    const fetchEvents = async () => {
+      try {
+        const response = await fetch('/api/events');
+        if (response.ok) {
+          const data = await response.json();
+          
+      
+         const formatDate = (val) => {
+            if (!val) return '—';
+            const d = new Date(val);
+            if (isNaN(d)) return '—';
+            
+            
+            const year = d.getFullYear();
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            
+            return `${year}-${month}-${day}`;
+          };
+
+          const safeEvents = data.map(ev => {
+            const eventYear = ev.eventDate ? new Date(ev.eventDate).getFullYear() : new Date().getFullYear();
+            
+            return {
+              rawId: ev.id,
+              uiId: `EVT-${eventYear}-${String(ev.id).padStart(3, '0')}`,
+              name: ev.shortName,
+              ruleset: ev.type,
+              status: ev.status ? ev.status.toLowerCase() : 'upcoming',
+              regStart: '—', 
+              regEnd: formatDate(ev.regCloseDate), // Fixed date cutoff
+              eventDate: formatDate(ev.eventDate), // Fixed date cutoff
+              stats: { 
+                competitors: ev.competitorCount || 0, 
+                clubs: ev.clubCount || 0,            
+                pendingPayments: 0 
+              }, 
+              categories: [] 
+            };
+          });
+          
+          setEvents(safeEvents);
+        }
+      } catch (error) {
+        console.error('Failed to fetch events:', error);
+      }
+    };
+    
+    fetchEvents();
+  }, []);
+
   return (
     <div className="wf">
       <TopBar breadcrumbs={[{ label: 'Admin' }, { label: 'Events' }]} />
@@ -59,15 +114,15 @@ export default function AdminEventList() {
             </thead>
             <tbody>
               {events.map((ev) => (
-                <tr key={ev.id}>
-                  <td className="mono">{ev.id}</td>
+                <tr key={ev.rawId}>
+                  <td className="mono">{ev.uiId}</td>
                   <td className="name">{ev.name}</td>
                   <td>
                     <Chip variant={ev.ruleset === 'WT' ? 'blue' : 'gold'}>{ev.ruleset}</Chip>
                   </td>
                   <td>
                     <Stamp variant={statusVariant(ev.status)}>
-                      {ev.status}
+                      {ev.status.toUpperCase()}
                     </Stamp>
                   </td>
                   <td className="mono" style={{ fontSize: '0.7rem' }}>
@@ -91,10 +146,10 @@ export default function AdminEventList() {
                   </td>
                   <td>
                     <div style={{ display: 'flex', gap: '0.375rem' }}>
-                      <Btn variant="ghost" size="sm" to={`/admin/events/${ev.id}`}>
+                      <Btn variant="ghost" size="sm" to={`/admin/events/${ev.uiId}`}>
                         Manage
                       </Btn>
-                      <Btn variant="ghost" size="sm" to={`/admin/events/${ev.id}/categories`}>
+                      <Btn variant="ghost" size="sm" to={`/admin/events/${ev.uiId}/categories`}>
                         Cats
                       </Btn>
                     </div>
