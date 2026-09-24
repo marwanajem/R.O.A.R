@@ -21,16 +21,38 @@ router.get('/', async (req, res) => {
   }
 });
 
-// GET single event by ID
+// GET single event with live stats by ID
 router.get('/:id', async (req, res) => {
   try {
-    const [events] = await pool.query('SELECT * FROM events WHERE id = ?', [req.params.id]);
-    
+    const eventId = req.params.id;
+    const [events] = await pool.query(`
+      SELECT 
+        e.*,
+        (SELECT COUNT(*) FROM competitors WHERE eventId = e.id) AS competitorCount,
+        (SELECT COUNT(DISTINCT clubCode) FROM competitors WHERE eventId = e.id) AS clubCount
+      FROM events e
+      WHERE e.id = ?
+    `, [eventId]);
+
     if (events.length === 0) {
       return res.status(404).json({ error: 'Event not found' });
     }
+
+    const ev = events[0];
     
-    res.json(events[0]);
+    
+    const formattedEvent = {
+      ...ev,
+      stats: {
+        competitors: ev.competitorCount || 0,
+        clubs: ev.clubCount || 0,
+        teams: 0, 
+        feesCollected: 0, 
+        feesTotal: (ev.competitorCount || 0) * 60 
+      }
+    };
+
+    res.json(formattedEvent);
   } catch (error) {
     console.error('Error fetching single event:', error);
     res.status(500).json({ error: 'Failed to fetch event' });

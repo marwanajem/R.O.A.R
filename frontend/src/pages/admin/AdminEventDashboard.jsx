@@ -7,12 +7,7 @@ import PageHead from '../../components/ui/PageHead'
 import Btn from '../../components/ui/Btn'
 import Chip from '../../components/ui/Chip'
 import Stamp from '../../components/ui/Stamp'
-import { getEvent } from '../../data/events'
-import { getCompetitorsByEvent } from '../../data/competitors'
 import { adminNavSections } from '../../utils/navSections'
-
-// BACKEND: replace getEvent / PAYMENT_QUEUE with fetch('/api/events/:id') and fetch('/api/events/:id/payments')
-// Verify/reject buttons should PATCH /api/payments/:payId/status
 
 function StatCard({ label, value, sub, accent }) {
   return (
@@ -24,36 +19,61 @@ function StatCard({ label, value, sub, accent }) {
   )
 }
 
-
 export default function AdminEventDashboard() {
-  const { id } = useParams()
-  const event = getEvent(id)
-  const competitors = getCompetitorsByEvent(id)
+  const { id } = useParams() 
+  const [event, setEvent] = useState(null)
+  const [competitors, setCompetitors] = useState([])
   const [queue, setQueue] = useState([])
+  const [loading, setLoading] = useState(true)
 
-  // Fetch real payments from your Node backend when the page loads
+  
+  const dbEventId = id ? parseInt(id.split('-').pop(), 10) : null
+
   useEffect(() => {
-    const fetchPayments = async () => {
+    const fetchDashboardData = async () => {
       try {
-        // This splits 'EVT-2026-001', takes the last piece ('001'), and turns it into the number 1
-        const dbEventId = parseInt(id.split('-').pop(), 10);
+        setLoading(true)
 
-        // Fetch using the real numeric ID
-        const response = await fetch(`api/events/${dbEventId}/payments`);
-        
-        if (response.ok) {
-          const data = await response.json();
-          setQueue(data);
+        //Fetch event details 
+        const eventRes = await fetch(`/api/events/${dbEventId}`)
+        if (eventRes.ok) {
+          const eventData = await eventRes.json()
+          setEvent(eventData)
+        }
+
+       // Fetch competitors 
+        const compRes = await fetch(`/api/events/${dbEventId}/competitors`)
+        if (compRes.ok) {
+          const compData = await compRes.json()
+          setCompetitors(compData)
+        }
+
+        // Fetch payment
+        const payRes = await fetch(`/api/events/${dbEventId}/payments`)
+        if (payRes.ok) {
+          const payData = await payRes.json()
+          setQueue(payData)
         }
       } catch (error) {
-        console.error('Failed to fetch payments:', error);
+        console.error('Failed to fetch dashboard data:', error)
+      } finally {
+        setLoading(false)
       }
-    };
-    
-    if (id) {
-      fetchPayments();
     }
-  }, [id]);
+
+    if (dbEventId) {
+      fetchDashboardData()
+    }
+  }, [dbEventId])
+
+  if (loading) {
+    return (
+      <div className="wf">
+        <TopBar />
+        <div className="wf-main"><p style={{ color: 'var(--muted)', padding: '2rem' }}>Loading live dashboard data...</p></div>
+      </div>
+    )
+  }
 
   if (!event) {
     return (
@@ -65,19 +85,18 @@ export default function AdminEventDashboard() {
   }
 
   function setPaymentStatus(payId, status) {
-    // BACKEND: PATCH /api/payments/:payId/status  { status }
     console.info(`Payment ${payId} → ${status}`)
     setQueue((prev) => prev.map((p) => p.id === payId ? { ...p, status } : p))
   }
 
-  const stats = event.stats
+  const stats = event.stats || { competitors: 0, clubs: 0, teams: 0, feesCollected: 0, feesTotal: 0 }
   const pendingPay = queue.filter((p) => p.status === 'pending').length
-  const feesPct = Math.round((stats.feesCollected / stats.feesTotal) * 100)
+  const feesPct = stats.feesTotal > 0 ? Math.round((stats.feesCollected / stats.feesTotal) * 100) : 0
 
-  // Compute category fill flags from real competitor data
+  // Compute category fill flags from real database competitor records
   const fillGroups = {}
   competitors.forEach((c) => {
-    const key = `${c.ageCategory} · ${c.beltGroup} · ${c.gender}`
+    const key = `${c.ageCategory || 'Open'} · ${c.beltGroup || 'General'} · ${c.gender || 'Mixed'}`
     fillGroups[key] = (fillGroups[key] || 0) + 1
   })
   const fillFlags = Object.entries(fillGroups)
@@ -148,6 +167,13 @@ export default function AdminEventDashboard() {
                 </tr>
               </thead>
               <tbody>
+                {queue.length === 0 && (
+                  <tr>
+                    <td colSpan="7" style={{ textAlign: 'center', color: 'var(--muted)', padding: '1.5rem', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.75rem' }}>
+                      No payment records found for this event.
+                    </td>
+                  </tr>
+                )}
                 {queue.map((p) => (
                   <tr key={p.id} style={{ opacity: p.status === 'rejected' ? 0.5 : 1 }}>
                     <td className="mono">{p.id}</td>
