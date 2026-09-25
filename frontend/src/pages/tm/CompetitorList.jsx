@@ -74,14 +74,13 @@ export default function CompetitorList() {
   async function handleDelete(cid) {
     if (confirmDelete === cid) {
       try {
-        
-        const response = await fetch(`/api/auth/login/api/competitors/${cid}`, {
+        // Corrected URL!
+        const response = await fetch(`/api/competitors/${cid}`, {
           method: 'DELETE',
         });
 
         if (!response.ok) throw new Error('Failed to delete');
 
-        
         setList((prev) => prev.filter((c) => c.id !== cid));
         setConfirmDelete(null);
         
