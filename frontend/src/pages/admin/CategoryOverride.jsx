@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
 import TopBar from '../../components/ui/TopBar'
 import ScopeBar from '../../components/ui/ScopeBar'
@@ -7,27 +7,90 @@ import PageHead from '../../components/ui/PageHead'
 import Btn from '../../components/ui/Btn'
 import Chip from '../../components/ui/Chip'
 import Stamp from '../../components/ui/Stamp'
-import { getEvent } from '../../data/events'
 import { adminNavSections } from '../../utils/navSections'
 import { ITF_WEIGHT_CLASSES, WT_WEIGHT_CLASSES } from '../../data/weightTemplates'
 
-// BACKEND: on Save, replace console.info with PATCH /api/events/:id/categories
-// Send the full `classes` array; backend validates ±5 kg tolerance before saving.
-// Note: the ±5 kg rule is a business rule — enforce it server-side too, not just here.
-
 export default function CategoryOverride() {
   const { id } = useParams()
-  const event = getEvent(id)
-
-  const templateClasses = event?.ruleset === 'WT' ? WT_WEIGHT_CLASSES : ITF_WEIGHT_CLASSES
-
-  const [classes, setClasses] = useState(() =>
-    templateClasses.map((wc) => ({ ...wc, enabled: true, overrideMin: wc.min, overrideMax: wc.max }))
-  )
-
+  const dbEventId = id ? parseInt(id.split('-').pop(), 10) : null
+  
+  const [event, setEvent] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [classes, setClasses] = useState([])
   const [filterAge, setFilterAge] = useState('')
   const [filterGender, setFilterGender] = useState('')
   const [saved, setSaved] = useState(false)
+
+  // Fetch real event from MySQL
+  useEffect(() => {
+    const fetchEventData = async () => {
+      try {
+        // Fetch event, custom categories simultaneously
+        const [eventRes, catRes] = await Promise.all([
+          fetch(`/api/events/${dbEventId}`),
+          fetch(`/api/events/${dbEventId}/categories`)
+        ]);
+
+        if (eventRes.ok) {
+          const eventData = await eventRes.json();
+          setEvent(eventData);
+          
+          const templateClasses = eventData.type === 'WT' ? WT_WEIGHT_CLASSES : ITF_WEIGHT_CLASSES;
+          
+          // If the database has saved categories, apply them. Otherwise, use defaults.
+          if (catRes.ok) {
+            const savedCats = await catRes.json();
+            if (savedCats.length > 0) {
+              const mergedClasses = templateClasses.map(template => {
+                const saved = savedCats.find(sc => sc.categoryId === template.id);
+                if (saved) {
+                  return {
+                    ...template,
+                    enabled: saved.isEnabled === 1,
+                    overrideMin: Number(saved.overrideMin),
+                    overrideMax: Number(saved.overrideMax)
+                  };
+                }
+                return { ...template, enabled: true, overrideMin: template.min, overrideMax: template.max };
+              });
+              setClasses(mergedClasses);
+              return;
+            }
+          }
+
+          // Fallback to defaults if no custom categories exist yet
+          setClasses(templateClasses.map((wc) => ({ ...wc, enabled: true, overrideMin: wc.min, overrideMax: wc.max })));
+        }
+      } catch (error) {
+        console.error('Failed to fetch event data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    if (dbEventId) {
+      fetchEventData();
+    }
+  }, [dbEventId]);
+  if (loading) {
+    return (
+      <div className="wf">
+        <TopBar />
+        <div className="wf-main"><p style={{ color: 'var(--muted)', padding: '2rem' }}>Loading category data...</p></div>
+      </div>
+    )
+  }
+
+  if (!event) {
+    return (
+      <div className="wf">
+        <TopBar />
+        <div className="wf-main"><p style={{ color: 'var(--muted)', padding: '2rem' }}>Event not found.</p></div>
+      </div>
+    )
+  }
+
+  const templateClasses = event.type === 'WT' ? WT_WEIGHT_CLASSES : ITF_WEIGHT_CLASSES;
 
   const filtered = classes.filter((wc) => {
     const matchAge = !filterAge || wc.ageGroup === filterAge
@@ -59,12 +122,24 @@ export default function CategoryOverride() {
     )
   }
 
-  function handleSave() {
-    console.info('Category overrides saved (ready for API):', classes)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 3000)
-  }
+  async function handleSave() {
+    try {
+      const response = await fetch(`/api/events/${dbEventId}/categories`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ classes })
+      });
 
+      if (response.ok) {
+        setSaved(true);
+        setTimeout(() => setSaved(false), 3000);
+      } else {
+        console.error("Failed to save categories");
+      }
+    } catch (e) { 
+      console.error('Network error saving categories:', e);
+    }
+  }
   return (
     <div className="wf">
       <TopBar
@@ -80,7 +155,7 @@ export default function CategoryOverride() {
         <main className="wf-main">
           <PageHead
             title="Category Overrides"
-            sub="Enable/disable weight classes and adjust ±5 kg thresholds"
+            sub={`Enable/disable weight classes and adjust ±5 kg thresholds for ${event.type} ruleset`}
             right={
               <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                 {saved && <Stamp variant="ok">Saved</Stamp>}

@@ -154,4 +154,60 @@ router.post('/', async (req, res) => {
     res.status(500).json({ error: 'Failed to create event' });
   }
 });
+// GET: Fetch category overrides for a specific event
+router.get('/:id/categories', async (req, res) => {
+  try {
+    const [categories] = await pool.query(
+      'SELECT * FROM event_categories WHERE eventId = ?', 
+      [req.params.id]
+    );
+    res.json(categories);
+  } catch (error) {
+    console.error('Error fetching categories:', error);
+    res.status(500).json({ error: 'Failed to fetch categories' });
+  }
+});
+
+// PATCH: Save all category overrides for an event
+router.patch('/:id/categories', async (req, res) => {
+  const connection = await pool.getConnection(); 
+  try {
+    const eventId = req.params.id;
+    const { classes } = req.body;
+
+    await connection.beginTransaction();
+
+  
+    await connection.query('DELETE FROM event_categories WHERE eventId = ?', [eventId]);
+
+  
+    if (classes && classes.length > 0) {
+      const insertValues = classes.map(c => [
+        eventId,
+        c.id, 
+        c.label,
+        c.gender,
+        c.ageGroup,
+        c.overrideMin,
+        c.overrideMax,
+        c.enabled ? 1 : 0
+      ]);
+
+      await connection.query(`
+        INSERT INTO event_categories 
+        (eventId, categoryId, label, gender, ageGroup, overrideMin, overrideMax, isEnabled) 
+        VALUES ?
+      `, [insertValues]);
+    }
+
+    await connection.commit();
+    res.json({ success: true, message: 'Categories updated successfully' });
+  } catch (error) {
+    await connection.rollback();
+    console.error('Error saving categories:', error);
+    res.status(500).json({ error: 'Failed to save categories' });
+  } finally {
+    connection.release();
+  }
+});
 export default router;
