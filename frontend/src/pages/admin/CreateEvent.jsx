@@ -387,10 +387,25 @@ export default function CreateEvent() {
   }
 
   const onSubmit = async (data) => {
-    console.info('Create event payload (ready for API):', data)
-    navigate('/admin')
-  }
+    try {
+      // Send the wizard data to backend route
+      const response = await fetch('/api/events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
 
+      if (response.ok) {
+        console.info('Event created successfully in MySQL!');
+        
+        navigate('/admin');
+      } else {
+        console.error('Failed to create event on the server.');
+      }
+    } catch (error) {
+      console.error('Network error creating event:', error);
+    }
+  }
   return (
     <div className="wf">
       <TopBar

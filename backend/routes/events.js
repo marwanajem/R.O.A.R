@@ -123,4 +123,35 @@ router.get('/:id/competitors', async (req, res) => {
   }
 });
 
+// POST: Create a new championship event
+router.post('/', async (req, res) => {
+  try {
+    const data = req.body;
+
+    
+    const [result] = await pool.query(`
+      INSERT INTO events 
+        (shortName, venue, type, eventDate, regCloseDate, status, individualFee, teamFee) 
+      VALUES 
+        (?, ?, ?, ?, ?, 'UPCOMING', ?, ?)
+    `, [
+      data.name,           // Goes into 'shortName'
+      data.venue,          // Goes into 'venue'
+      data.ruleset,        // Goes into 'type' (ITF or WT)
+      data.eventDate,      // Goes into 'eventDate'
+      data.regEnd,         // Goes into 'regCloseDate'
+      data.feeIndividual,  // Goes into 'individualFee'
+      data.feeTeam         // Goes into 'teamFee'
+    ]);
+
+    res.status(201).json({ 
+      success: true, 
+      eventId: result.insertId, 
+      message: 'Event published successfully!' 
+    });
+  } catch (error) {
+    console.error('Error creating event:', error);
+    res.status(500).json({ error: 'Failed to create event' });
+  }
+});
 export default router;
