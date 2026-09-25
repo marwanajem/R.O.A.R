@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import TopBar from '../../components/ui/TopBar'
 import SideNav from '../../components/ui/SideNav'
 import PageHead from '../../components/ui/PageHead'
@@ -8,21 +8,45 @@ import Stamp from '../../components/ui/Stamp'
 import { ITF_WEIGHT_CLASSES, WT_WEIGHT_CLASSES } from '../../data/weightTemplates'
 import { adminTopNavSections } from '../../utils/navSections'
 
-// BACKEND: on Save, replace console.info with PATCH /api/weight-templates/:ruleset
-// Body: full classes array. These are global defaults, not per-event.
-
 function blankClass(ruleset, id) {
   return { id, ruleset, ageGroup: '', gender: 'M', label: '', min: 0, max: 0, defaultMin: 0, defaultMax: 0 }
 }
 
-function TemplateEditor({ ruleset, initialClasses }) {
-  const [classes, setClasses] = useState(initialClasses)
+function TemplateEditor({ ruleset, fallbackClasses }) {
+  const [classes, setClasses] = useState([])
+  const [loading, setLoading] = useState(true)
   const [filterAge, setFilterAge] = useState('')
   const [filterGender, setFilterGender] = useState('')
   const [saved, setSaved] = useState(false)
-  const [nextId, setNextId] = useState(initialClasses.length + 1)
+  const [nextId, setNextId] = useState(1)
 
-  const ageGroups = [...new Set(initialClasses.map((wc) => wc.ageGroup))]
+  // Fetch from DB on load
+  useEffect(() => {
+    async function fetchTemplates() {
+      try {
+        const res = await fetch(`/api/weight-templates/${ruleset}`)
+        if (res.ok) {
+          const data = await res.json()
+          if (data.length > 0) {
+            // DB has data, use it
+            setClasses(data.map(d => ({...d, min: Number(d.min), max: Number(d.max)})))
+            setNextId(data.length + 1)
+          } else {
+            // DB is empty, use the hardcoded fallbacks
+            setClasses(fallbackClasses)
+            setNextId(fallbackClasses.length + 1)
+          }
+        }
+      } catch(e) {
+        console.error("Failed to load templates", e)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchTemplates()
+  }, [ruleset, fallbackClasses])
+
+  const ageGroups = [...new Set(classes.map((wc) => wc.ageGroup))]
 
   const filtered = classes.filter((wc) => {
     const matchAge = !filterAge || wc.ageGroup === filterAge
@@ -46,10 +70,25 @@ function TemplateEditor({ ruleset, initialClasses }) {
     setClasses((prev) => prev.filter((wc) => wc.id !== id))
   }
 
-  function handleSave() {
-    console.info(`Weight template saved (ready for API) [${ruleset}]:`, classes)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 3000)
+  // Save to database
+  async function handleSave() {
+    try {
+      const response = await fetch(`/api/weight-templates/${ruleset}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ classes })
+      })
+      if (response.ok) {
+        setSaved(true)
+        setTimeout(() => setSaved(false), 3000)
+      }
+    } catch(e) {
+      console.error('Network error saving templates:', e)
+    }
+  }
+
+  if (loading) {
+    return <div style={{ padding: '2rem', color: 'var(--muted)' }}>Loading templates...</div>
   }
 
   return (
@@ -222,10 +261,10 @@ export default function WeightTemplates() {
           </div>
 
           {activeTab === 'ITF' && (
-            <TemplateEditor key="ITF" ruleset="ITF" initialClasses={ITF_WEIGHT_CLASSES} />
+            <TemplateEditor key="ITF" ruleset="ITF" fallbackClasses={ITF_WEIGHT_CLASSES} />
           )}
           {activeTab === 'WT' && (
-            <TemplateEditor key="WT" ruleset="WT" initialClasses={WT_WEIGHT_CLASSES} />
+            <TemplateEditor key="WT" ruleset="WT" fallbackClasses={WT_WEIGHT_CLASSES} />
           )}
         </main>
       </div>

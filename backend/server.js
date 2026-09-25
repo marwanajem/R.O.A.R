@@ -6,6 +6,7 @@ import authRoutes from './routes/auth.js';
 import eventRoutes from './routes/events.js';
 import competitorRoutes from './routes/competitors.js';
 import teamRoutes from './routes/teams.js';
+import weightTemplateRoutes from './routes/weightTemplates.js';
 dotenv.config();
 
 const app = express();
@@ -40,6 +41,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/events', eventRoutes);
 app.use('/api/competitors', competitorRoutes);
 app.use('/api/teams', teamRoutes);
+app.use('/api/weight-templates', weightTemplateRoutes);
 // test route
 app.get('/api/status', (req, res) => {
   res.json({ message:  ' API is running securely' });
