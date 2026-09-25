@@ -3,15 +3,13 @@ import pool from '../server.js';
 
 const router = express.Router();
 
-
+// POST: Add a new competitor
 router.post('/', async (req, res) => {
   try {
-   
     const { 
       eventId, clubCode, fullName, icMasked, dob, gender, 
       beltGrade, ageCategory, beltGroup, weightKg, weightCategory, patternFormat 
     } = req.body;
-
     
     const [result] = await pool.query(
       `INSERT INTO competitors 
@@ -20,19 +18,19 @@ router.post('/', async (req, res) => {
       [eventId, clubCode, fullName, icMasked, dob, gender, beltGrade, ageCategory, beltGroup, weightKg, weightCategory, patternFormat]
     );
 
-    res.status(201).json({ message: 'Competitor added successfully', id: result.insertId });
+    res.status(201).json({ success: true, message: 'Competitor added successfully', id: result.insertId });
   } catch (error) {
     console.error('Error adding competitor:', error);
     res.status(500).json({ error: 'Failed to add competitor' });
   }
 });
 
-
+// GET: Fetch competitors for a specific event AND club
 router.get('/event/:eventId/club/:clubCode', async (req, res) => {
   try {
     const { eventId, clubCode } = req.params;
     const [competitors] = await pool.query(
-      'SELECT * FROM competitors WHERE eventId = ? AND clubCode = ? ORDER BY created_at ASC', // usinf club code to ensure we only see specific club athletes
+      'SELECT * FROM competitors WHERE eventId = ? AND clubCode = ? ORDER BY created_at ASC',
       [eventId, clubCode]
     );
     res.json(competitors);
@@ -42,21 +40,7 @@ router.get('/event/:eventId/club/:clubCode', async (req, res) => {
   }
 });
 
-router.delete('/:id', async (req, res) => {
-  try {
-    const [result] = await pool.query('DELETE FROM competitors WHERE id = ?', [req.params.id]);
-    
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ error: 'Competitor not found' });
-    }
-    
-    res.json({ message: 'Competitor deleted successfully' });
-  } catch (error) {
-    console.error('Error deleting competitor:', error);
-    res.status(500).json({ error: 'Failed to delete competitor' });
-  }
-});
-
+// PUT: Update an existing competitor
 router.put('/:id', async (req, res) => {
   try {
     const { 
@@ -76,14 +60,14 @@ router.put('/:id', async (req, res) => {
       return res.status(404).json({ error: 'Competitor not found' });
     }
 
-    res.json({ message: 'Competitor updated successfully' });
+    res.json({ success: true, message: 'Competitor updated successfully' });
   } catch (error) {
     console.error('Error updating competitor:', error);
     res.status(500).json({ error: 'Failed to update competitor' });
   }
 });
 
-
+// POST: Bulk upload competitors (from CSV)
 router.post('/bulk', async (req, res) => {
   try {
     const { competitors } = req.body;
@@ -91,24 +75,11 @@ router.post('/bulk', async (req, res) => {
     if (!competitors || competitors.length === 0) {
       return res.status(400).json({ error: 'No competitors provided' });
     }
-
    
     const values = competitors.map(c => [
-      c.eventId,
-      c.clubCode,
-      c.fullName,
-      c.icMasked,
-      c.dob,
-      c.gender,
-      c.beltGrade,
-      c.ageCategory,
-      c.beltGroup,
-      c.weightKg,
-      c.weightCategory,
-      c.patternFormat,
-      'pending' 
+      c.eventId, c.clubCode, c.fullName, c.icMasked, c.dob, c.gender,
+      c.beltGrade, c.ageCategory, c.beltGroup, c.weightKg, c.weightCategory, c.patternFormat, 'pending' 
     ]);
-
    
     const [result] = await pool.query(
       `INSERT INTO competitors 
@@ -118,6 +89,7 @@ router.post('/bulk', async (req, res) => {
     );
 
     res.status(201).json({ 
+      success: true,
       message: `Successfully added ${result.affectedRows} competitors`,
       count: result.affectedRows 
     });
@@ -126,6 +98,7 @@ router.post('/bulk', async (req, res) => {
     res.status(500).json({ error: 'Failed to upload competitors' });
   }
 });
+
 // DELETE: Remove a competitor
 router.delete('/:id', async (req, res) => {
   try {
@@ -141,4 +114,5 @@ router.delete('/:id', async (req, res) => {
     res.status(500).json({ error: 'Failed to delete competitor' });
   }
 });
+
 export default router;

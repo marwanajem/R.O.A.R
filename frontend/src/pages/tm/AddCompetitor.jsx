@@ -108,11 +108,14 @@ export default function AddCompetitor() {
 
   const onSubmit = async (data) => {
     try {
+      // Parse 'EVT-2026-001' into the integer 1 for MySQL
+      const dbEventId = parseInt(id.split('-').pop(), 10);
+
       const payload = {
-        eventId: id,
-        clubCode: user.clubCode, //attaches the athlete to club code
+        eventId: dbEventId, 
+        clubCode: user.clubCode, 
         fullName: data.fullName,
-        icMasked: data.icNumber.substring(0, 10) + 'XXXX', // Mask the IC 
+        icMasked: data.icNumber.substring(0, 10) + 'XXXX', 
         dob: data.dob,
         gender: data.gender,
         beltGrade: data.beltGrade,
@@ -121,10 +124,8 @@ export default function AddCompetitor() {
         weightKg: parseFloat(data.weightKg),
         weightCategory: derived.weightClass,
         patternFormat: derived.patternFormat
-   
       }
 
-      
       const response = await fetch('/api/competitors', {
         method: 'POST',
         headers: {
@@ -137,7 +138,7 @@ export default function AddCompetitor() {
         throw new Error('Failed to save competitor')
       }
 
-      // navigate back to the roster list
+      // Navigate back to the roster list
       navigate(`/events/${id}/competitors`)
       
     } catch (error) {
