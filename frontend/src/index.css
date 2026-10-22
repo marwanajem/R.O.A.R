@@ -818,4 +818,52 @@
   .timeline-item:last-child::before {
     display: none;
   }
+  /* ── Mobile Responsiveness ── */
+  @media (max-width: 768px) {
+    .wf-body {
+      flex-direction: column;
+    }
+
+    .wf-main {
+      padding: 1rem;
+    }
+
+    .sidenav {
+      width: 100%;
+      border-right: none;
+      border-bottom: 1px solid var(--line);
+      flex-direction: row;
+      padding: 0;
+      overflow-x: auto;
+      /* Hide scrollbar for cleaner look */
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+
+    .sidenav::-webkit-scrollbar {
+      display: none;
+    }
+
+    .sidenav-group {
+      display: flex;
+      flex-direction: row;
+    }
+
+    .sidenav-section {
+      /* Hide text like 'NAVIGATION' on mobile to save space */
+      display: none; 
+    }
+
+    .sidenav-item {
+      border-left: none;
+      border-bottom: 3px solid transparent;
+      padding: 0.75rem 1.25rem;
+      white-space: nowrap;
+    }
+
+    .sidenav-item.active {
+      border-left-color: transparent;
+      border-bottom-color: var(--gold);
+    }
+  }
 }

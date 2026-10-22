@@ -1,15 +1,11 @@
 import React from 'react'
 import { NavLink } from 'react-router-dom'
 
-/**
- * SideNav
- * sections: [{ label, items: [{ to, label, badge?, dot? }] }]
- */
 export default function SideNav({ sections }) {
   return (
     <nav className="sidenav" aria-label="Side navigation">
       {sections.map((section, si) => (
-        <div key={si}>
+        <div key={si} className="sidenav-group">
           {section.label && (
             <div className="sidenav-section">{section.label}</div>
           )}
