@@ -11,6 +11,7 @@ dotenv.config();
 
 const app = express();
 
+
 app.use(cors({ origin: '*' }));
 
 app.use(express.json());
@@ -55,6 +56,7 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+app.use('/uploads', express.static('uploads'));
 // Serve the compiled React frontend from inside the backend folder
 app.use(express.static(path.join(__dirname,'../frontend/dist')));
 

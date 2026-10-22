@@ -1,7 +1,32 @@
 import express from 'express';
 import pool from '../server.js'; // database connection
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
 
 const router = express.Router();
+
+// Create the uploads directory if it doesn't exist
+const uploadDir = 'uploads/payments';
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+// Configure where and how the files are saved
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, uploadDir);
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, 'payment-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({ 
+  storage: storage,
+  limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
+});
 
 // GET all events (now with dynamic competitor & club counts!)
 router.get('/', async (req, res) => {
@@ -210,4 +235,33 @@ router.patch('/:id/categories', async (req, res) => {
     connection.release();
   }
 });
+
+// POST: Upload payment proof and save to database
+router.post('/:id/payments', upload.single('proofFile'), async (req, res) => {
+  try {
+    const eventId = req.params.id;
+    const { userId, referenceCode, amount } = req.body;
+    
+   
+    const proofUrl = req.file ? `/uploads/payments/${req.file.filename}` : null;
+
+    if (!proofUrl) {
+      return res.status(400).json({ error: 'Payment proof file is required' });
+    }
+
+   
+    const [result] = await pool.query(`
+      INSERT INTO payments 
+        (event_id, user_id, reference_code, amount, status, proof_url) 
+      VALUES 
+        (?, ?, ?, ?, 'pending', ?)
+    `, [eventId, userId, referenceCode, amount, proofUrl]);
+
+    res.status(201).json({ success: true, paymentId: result.insertId });
+  } catch (error) {
+    console.error('Error saving payment:', error);
+    res.status(500).json({ error: 'Failed to submit payment' });
+  }
+});
+
 export default router;

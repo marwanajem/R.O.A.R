@@ -7,7 +7,6 @@ import SideNav from '../../components/ui/SideNav'
 import PageHead from '../../components/ui/PageHead'
 import Field from '../../components/ui/Field'
 import Btn from '../../components/ui/Btn'
-import Chip from '../../components/ui/Chip'
 import Stamp from '../../components/ui/Stamp'
 import { useAuth } from '../../contexts/AuthContext'
 import { tmNavSections } from '../../utils/navSections'
@@ -15,9 +14,7 @@ import { tmNavSections } from '../../utils/navSections'
 const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
 
-// Temporary settings until I build the Admin configuration database
 const config = {
-  fees: { individual: 80, team: 150 },
   bankDetails: {
     bank: 'Maybank',
     accountName: 'ROAR Championship',
@@ -39,24 +36,30 @@ export default function FeesPayment() {
   const [fileError, setFileError] = useState('')
   const [submitted, setSubmitted] = useState(false)
 
-  
-  useEffect(() => {
+ useEffect(() => {
     const fetchData = async () => {
       if (!user?.clubCode) return
 
       try {
-        
-        const eventRes = await fetch(`/api/auth/login/api/events/${id}`)
+        const eventRes = await fetch(`/api/events/${id}`)
         if (eventRes.ok) setEvent(await eventRes.json())
 
-       
-        const [compRes, teamRes] = await Promise.all([
+        // Fetch competitors, teams, existing payments
+        const [compRes, teamRes, paymentsRes] = await Promise.all([
           fetch(`/api/competitors/event/${id}/club/${user.clubCode}`),
-          fetch(`/api/teams/event/${id}/club/${user.clubCode}`)
+          fetch(`/api/teams/event/${id}/club/${user.clubCode}`),
+          fetch(`/api/events/${id}/payments`)
         ])
 
         if (compRes.ok) setCompetitors(await compRes.json())
         if (teamRes.ok) setTeams(await teamRes.json())
+        
+        // Check if this club already submitted a payment
+        if (paymentsRes.ok) {
+          const payments = await paymentsRes.json()
+          const myPayment = payments.find(p => p.clubCode === user?.clubCode)
+          if (myPayment) setSubmitted(true)
+        }
       } catch (error) {
         console.error('Failed to load invoice data:', error)
       } finally {
@@ -66,30 +69,25 @@ export default function FeesPayment() {
     fetchData()
   }, [id, user?.clubCode])
 
-  const {
-    register,
-    handleSubmit,
-    watch,
-    formState: { errors, isSubmitting },
-  } = useForm()
+  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm()
 
+  // FIXED: Dynamically read the fees from the database, fallback to 0 if loading
+  const indivRate = parseFloat(event?.individualFee || 0)
+  const teamRate = parseFloat(event?.teamFee || 0)
   
-  const indivFees = competitors.length * config.fees.individual
-  const teamFees = teams.length * config.fees.team
+  const indivFees = competitors.length * indivRate
+  const teamFees = teams.length * teamRate
   const totalDue = indivFees + teamFees
 
   function validateFile(files) {
     if (!files || files.length === 0) return 'Payment proof is required.'
     const file = files[0]
-    if (!ALLOWED_TYPES.includes(file.type)) {
-      return 'Only JPG, PNG, WebP, or PDF files are accepted.'
-    }
-    if (file.size > MAX_FILE_SIZE) {
-      return 'File must be 5 MB or smaller.'
-    }
+    if (!ALLOWED_TYPES.includes(file.type)) return 'Only JPG, PNG, WebP, or PDF files are accepted.'
+    if (file.size > MAX_FILE_SIZE) return 'File must be 5 MB or smaller.'
     return true
   }
 
+  // FIXED: Implemented actual FormData upload to match backend
   const onSubmit = async (data) => {
     const fileValidation = validateFile(data.proofFile)
     if (fileValidation !== true) {
@@ -98,18 +96,23 @@ export default function FeesPayment() {
     }
     setFileError('')
     
-    // BACKEND TODO: Build the payments database table and multer file upload pipeline!
-    console.info('Payment submission (ready for API):', {
-      eventId: id,
-      ref: data.paymentRef,
-      amount: data.paymentAmount,
-      fileName: data.proofFile[0]?.name,
-    })
-    
-    
-    setTimeout(() => {
+    const formData = new FormData()
+    formData.append('userId', user.id) 
+    formData.append('referenceCode', data.paymentRef)
+    formData.append('amount', data.paymentAmount)
+    formData.append('proofFile', data.proofFile[0])
+
+    try {
+      const response = await fetch(`/api/events/${id}/payments`, {
+        method: 'POST',
+        body: formData, 
+      })
+      if (!response.ok) throw new Error('Failed to upload payment proof')
       setSubmitted(true)
-    }, 1000)
+    } catch (error) {
+      console.error(error)
+      setFileError('Upload failed. Please try again.')
+    }
   }
 
   const timelineItems = [
@@ -133,30 +136,18 @@ export default function FeesPayment() {
 
   return (
     <div className="wf">
-      <TopBar
-        breadcrumbs={[
-          { label: 'Events', to: '/events' },
-          { label: event?.shortName || id, to: `/events/${id}` },
-          { label: 'Fees & Payment' },
-        ]}
-      />
+      <TopBar breadcrumbs={[{ label: 'Events', to: '/events' }, { label: event?.shortName || id, to: `/events/${id}` }, { label: 'Fees & Payment' }]} />
       <ScopeBar event={event} switchTo="/events" />
       <div className="wf-body">
         <SideNav sections={tmNavSections(id)} />
         <main className="wf-main">
-          <PageHead
-            title="Fees & Payment"
-            sub="Submit bank transfer proof for admin verification"
-          />
+          <PageHead title="Fees & Payment" sub="Submit bank transfer proof for admin verification" />
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: '1.5rem', alignItems: 'start' }}>
-            {/* Left — fee table + upload */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {/* Fee breakdown */}
+              
               <div className="box">
-                <div className="section-label">
-                  Fee Breakdown
-                </div>
+                <div className="section-label">Fee Breakdown</div>
                 <table className="tbl">
                   <thead>
                     <tr>
@@ -170,25 +161,20 @@ export default function FeesPayment() {
                     <tr>
                       <td>Individual Registration</td>
                       <td className="mono">{competitors.length}</td>
-                      <td className="mono">{config.fees.individual}</td>
+                      <td className="mono">{indivRate}</td>
                       <td className="mono">{indivFees}</td>
                     </tr>
                     <tr>
                       <td>Team / Pair Registration</td>
                       <td className="mono">{teams.length}</td>
-                      <td className="mono">{config.fees.team}</td>
+                      <td className="mono">{teamRate}</td>
                       <td className="mono">{teamFees}</td>
                     </tr>
                     <tr style={{ borderTop: '1px solid var(--line)' }}>
-                      <td
-                        colSpan={3}
-                        style={{ textAlign: 'right', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.6875rem', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--muted)' }}
-                      >
+                      <td colSpan={3} style={{ textAlign: 'right', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.6875rem', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--muted)' }}>
                         Total Due
                       </td>
-                      <td
-                        style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '1rem', color: 'var(--gold)', fontWeight: 700 }}
-                      >
+                      <td style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '1rem', color: 'var(--gold)', fontWeight: 700 }}>
                         MYR {totalDue}
                       </td>
                     </tr>
@@ -196,11 +182,8 @@ export default function FeesPayment() {
                 </table>
               </div>
 
-              {/* Bank details */}
               <div className="box">
-                <div className="section-label" style={{ marginBottom: '0.875rem' }}>
-                  Bank Transfer Details
-                </div>
+                <div className="section-label" style={{ marginBottom: '0.875rem' }}>Bank Transfer Details</div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                   {[
                     { label: 'Bank', value: config.bankDetails.bank },
@@ -209,53 +192,31 @@ export default function FeesPayment() {
                     { label: 'Payment Reference', value: config.bankDetails.ref.replace('{clubCode}', user?.clubCode || 'YOURCLUB') },
                   ].map(({ label, value }) => (
                     <div key={label}>
-                      <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '0.6rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--muted-2)', marginBottom: '3px' }}>
-                        {label}
-                      </div>
-                      <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem', color: 'var(--ink)', letterSpacing: '0.04em' }}>
-                        {value}
-                      </div>
+                      <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '0.6rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--muted-2)', marginBottom: '3px' }}>{label}</div>
+                      <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem', color: 'var(--ink)', letterSpacing: '0.04em' }}>{value}</div>
                     </div>
                   ))}
                 </div>
               </div>
 
-              {/* Upload form */}
               {!submitted ? (
                 <div className="box">
-                  <div className="section-label">
-                    Upload Payment Proof
-                  </div>
+                  <div className="section-label">Upload Payment Proof</div>
                   <form onSubmit={handleSubmit(onSubmit)} noValidate>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                       <Field
                         label="Payment Reference / Transaction ID"
-                        name="paymentRef"
-                        id="paymentRef"
-                        type="text"
-                        autoComplete="off"
-                        required
+                        name="paymentRef" id="paymentRef" type="text" autoComplete="off" required
                         placeholder={`e.g. ${config.bankDetails.ref.replace('{clubCode}', user?.clubCode || 'YOURCLUB')}-20260604`}
                         error={errors.paymentRef?.message}
-                        {...register('paymentRef', {
-                          required: 'Payment reference is required.',
-                          minLength: { value: 5, message: 'Reference too short.' },
-                        })}
+                        {...register('paymentRef', { required: 'Payment reference is required.', minLength: { value: 5, message: 'Reference too short.' } })}
                       />
                       <Field
                         label="Amount Transferred (MYR)"
-                        name="paymentAmount"
-                        id="paymentAmount"
-                        type="number"
-                        inputMode="decimal"
-                        autoComplete="off"
-                        required
+                        name="paymentAmount" id="paymentAmount" type="number" inputMode="decimal" autoComplete="off" required
                         placeholder={String(totalDue)}
                         error={errors.paymentAmount?.message}
-                        {...register('paymentAmount', {
-                          required: 'Amount is required.',
-                          min: { value: 1, message: 'Amount must be positive.' },
-                        })}
+                        {...register('paymentAmount', { required: 'Amount is required.', min: { value: 1, message: 'Amount must be positive.' } })}
                       />
 
                       <div className="field-group">
@@ -263,26 +224,16 @@ export default function FeesPayment() {
                           Receipt / Screenshot<span className="field-required">*</span>
                         </label>
                         <input
-                          id="proofFile"
-                          name="proofFile"
-                          type="file"
-                          accept="image/*,application/pdf"
+                          id="proofFile" name="proofFile" type="file" accept="image/*,application/pdf"
                           className={`field-input ${fileError || errors.proofFile ? 'error' : ''}`}
-                          style={{ paddingTop: '0.4rem' }}
-                          aria-required
-                          {...register('proofFile', {
-                            required: 'Please attach the payment receipt.',
-                          })}
+                          style={{ paddingTop: '0.4rem' }} aria-required
+                          {...register('proofFile', { required: 'Please attach the payment receipt.' })}
                         />
                         <span className="field-hint">JPG, PNG, WebP or PDF · max 5 MB</span>
-                        {(fileError || errors.proofFile) && (
-                          <span className="field-error">{fileError || errors.proofFile?.message}</span>
-                        )}
+                        {(fileError || errors.proofFile) && <span className="field-error">{fileError || errors.proofFile?.message}</span>}
                       </div>
                     </div>
-
                     <hr className="divider" />
-
                     <Btn variant="primary" type="submit" disabled={isSubmitting} style={{ width: '100%' }}>
                       {isSubmitting ? 'Submitting…' : 'Submit Payment Proof'}
                     </Btn>
@@ -290,42 +241,21 @@ export default function FeesPayment() {
                 </div>
               ) : (
                 <div className="box" style={{ textAlign: 'center', padding: '2rem' }}>
-                  <Stamp variant="ok" style={{ fontSize: '1rem', marginBottom: '0.75rem' }}>
-                    Submitted
-                  </Stamp>
-                  <p style={{ color: 'var(--ink-2)', marginTop: '0.75rem' }}>
-                    Payment proof submitted. Awaiting admin verification.
-                  </p>
+                  <Stamp variant="ok" style={{ fontSize: '1rem', marginBottom: '0.75rem' }}>Submitted</Stamp>
+                  <p style={{ color: 'var(--ink-2)', marginTop: '0.75rem' }}>Payment proof submitted. Awaiting admin verification.</p>
                 </div>
               )}
             </div>
 
-            {/* Right — timeline */}
             <div className="box-fill" style={{ position: 'sticky', top: '1.5rem' }}>
-              <div className="section-label">
-                Status Timeline
-              </div>
+              <div className="section-label">Status Timeline</div>
               <div className="timeline">
                 {timelineItems.map((item, i) => (
                   <div key={i} className="timeline-item">
-                    <div
-                      className={`timeline-dot ${item.done ? 'done' : item.active ? 'active' : ''}`}
-                    />
+                    <div className={`timeline-dot ${item.done ? 'done' : item.active ? 'active' : ''}`} />
                     <div style={{ flex: 1 }}>
-                      <div
-                        style={{
-                          fontSize: '0.8125rem',
-                          color: item.done ? 'var(--ok)' : item.active ? 'var(--gold)' : 'var(--muted)',
-                          fontWeight: item.active ? 600 : 400,
-                        }}
-                      >
-                        {item.label}
-                      </div>
-                      {item.date && (
-                        <div style={{ fontSize: '0.6875rem', color: 'var(--muted-2)', fontFamily: 'JetBrains Mono, monospace' }}>
-                          {item.date}
-                        </div>
-                      )}
+                      <div style={{ fontSize: '0.8125rem', color: item.done ? 'var(--ok)' : item.active ? 'var(--gold)' : 'var(--muted)', fontWeight: item.active ? 600 : 400 }}>{item.label}</div>
+                      {item.date && <div style={{ fontSize: '0.6875rem', color: 'var(--muted-2)', fontFamily: 'JetBrains Mono, monospace' }}>{item.date}</div>}
                     </div>
                     {item.done && <Stamp variant="ok" style={{ fontSize: '0.6rem' }}>Done</Stamp>}
                     {item.active && !item.done && <Stamp variant="gold">Pending</Stamp>}

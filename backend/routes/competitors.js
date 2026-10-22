@@ -115,4 +115,23 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+// GET: Fetch ALL competitors for a specific club (Master Roster) // page: Mater lsit athlete
+router.get('/club/:clubCode', async (req, res) => {
+  try {
+    const { clubCode } = req.params;
+    const [competitors] = await pool.query(
+      `SELECT c.*, e.shortName AS eventName 
+       FROM competitors c 
+       LEFT JOIN events e ON c.eventId = e.id 
+       WHERE c.clubCode = ? 
+       ORDER BY c.created_at DESC`,
+      [clubCode]
+    );
+    res.json(competitors);
+  } catch (error) {
+    console.error('Error fetching master roster:', error);
+    res.status(500).json({ error: 'Failed to fetch master roster' });
+  }
+});
+
 export default router;

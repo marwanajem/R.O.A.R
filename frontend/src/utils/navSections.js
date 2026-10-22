@@ -12,7 +12,19 @@ export function tmTopNavSections() {
   return [
     {
       label: 'Navigation',
-      items: [{ to: '/events', label: 'All Events', end: true }],
+      items: [
+        { to: '/events', label: 'All Events', end: true },
+        { to: '/events?filter=open', label: 'Open Registration' },
+        { to: '/events?filter=upcoming', label: 'Upcoming' },
+        { to: '/events?filter=past', label: 'Past Events' },
+      ],
+    },
+    {
+      label: 'Club Management',
+      items: [
+        { to: '/club/roster', label: 'Master Athlete List' },
+        { to: '/club/payments', label: 'Overall Payments' },
+      ],
     },
   ]
 }

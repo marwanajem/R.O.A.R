@@ -18,6 +18,8 @@ import BulkUpload from './pages/tm/BulkUpload'
 import TeamList from './pages/tm/TeamList'
 import TeamBuilder from './pages/tm/TeamBuilder'
 import FeesPayment from './pages/tm/FeesPayment'
+import MasterAthleteList from './pages/tm/MasterAthleteList'
+import OverallPayments from './pages/tm/OverallPayments'
 
 // Admin pages
 import AdminEventList from './pages/admin/AdminEventList'
@@ -50,7 +52,9 @@ export default function App() {
             <Route path="/events/:id/teams" element={<ProtectedRoute requiredRole="TM"><TeamList /></ProtectedRoute>} />
             <Route path="/events/:id/teams/new" element={<ProtectedRoute requiredRole="TM"><TeamBuilder /></ProtectedRoute>} />
             <Route path="/events/:id/fees" element={<ProtectedRoute requiredRole="TM"><FeesPayment /></ProtectedRoute>} />
-
+            <Route path="/club/roster" element={<ProtectedRoute requiredRole="TM"><MasterAthleteList /></ProtectedRoute>} />
+            <Route path="/club/payments" element={<ProtectedRoute requiredRole="TM"><OverallPayments /></ProtectedRoute>} />
+            
             {/* Admin routes */}
             <Route path="/admin" element={<ProtectedRoute requiredRole="ADMIN"><AdminEventList /></ProtectedRoute>} />
             <Route path="/admin/weight-templates" element={<ProtectedRoute requiredRole="ADMIN"><WeightTemplates /></ProtectedRoute>} />
