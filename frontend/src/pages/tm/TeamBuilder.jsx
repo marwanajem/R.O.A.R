@@ -31,7 +31,6 @@ export default function TeamBuilder() {
   const [filterGender, setFilterGender] = useState('')
   const [selected, setSelected] = useState([])
 
- 
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -76,10 +75,14 @@ export default function TeamBuilder() {
 
   async function handleSubmit(e) {
     e.preventDefault()
-    if (selected.length < slotsRequired) return
+    
+    // Allow partial teams, but require at least 1 anchor member
+    if (selected.length === 0) {
+      alert("Please select at least one member to start building this team.");
+      return;
+    }
 
     try {
-      
       const teamName = `${category} - ${filterGender || 'Mixed'} ${filterAge || 'Open'}`
 
       const payload = {
@@ -92,7 +95,6 @@ export default function TeamBuilder() {
         members: selected
       }
 
-      
       const response = await fetch('/api/teams', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -101,7 +103,6 @@ export default function TeamBuilder() {
 
       if (!response.ok) throw new Error('Failed to save team')
 
-      alert('Team created successfully!')
       navigate(`/events/${id}/teams`)
       
     } catch (error) {
@@ -113,58 +114,35 @@ export default function TeamBuilder() {
   const filled = selected.length
   const slotStatus = filled >= slotsRequired ? 'complete' : filled > 0 ? 'partial' : 'empty'
 
-  if (loading) {
-    return (
-      <div className="wf">
-        <TopBar />
-        <div className="wf-main" style={{ padding: '2rem' }}>
-          <p style={{ color: 'var(--muted)' }}>Loading eligible athletes...</p>
-        </div>
-      </div>
-    )
-  }
+  if (loading) return <div className="wf"><TopBar /><div className="wf-main" style={{ padding: '2rem' }}><p style={{ color: 'var(--muted)' }}>Loading eligible athletes...</p></div></div>
 
   return (
     <div className="wf">
-      <TopBar
-        breadcrumbs={[
-          { label: 'Events', to: '/events' },
-          { label: event?.shortName || id, to: `/events/${id}` },
-          { label: 'Teams & Pairs', to: `/events/${id}/teams` },
-          { label: 'New Team' },
-        ]}
-      />
+      <TopBar breadcrumbs={[{ label: 'Events', to: '/events' }, { label: event?.shortName || id, to: `/events/${id}` }, { label: 'Teams & Pairs', to: `/events/${id}/teams` }, { label: 'New Team' }]} />
       <ScopeBar event={event} switchTo="/events" />
       <div className="wf-body">
-        <SideNav sections={tmNavSections(id)} />
+        
+        {event && <SideNav sections={tmNavSections(id, event.type)} />}
+        
         <main className="wf-main">
-          <PageHead title="Build Team / Pair" sub="Select competitors for this entry" />
+          <PageHead title="Build Team / Pair" sub="Select competitors for this entry (can be finished later)" />
 
           <form onSubmit={handleSubmit}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: '1.5rem', alignItems: 'start' }}>
               
               <div>
-           
                 <div className="box" style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
-                  <SelectField
-                    label="Category"
-                    name="category"
-                    id="category"
-                    value={category}
-                    onChange={(e) => { setCategory(e.target.value); setSelected([]) }}
-                    style={{ flex: '1 1 160px' }}
+                  
+                  <SelectField label="Category" name="category" id="category" value={category} style={{ flex: '1 1 160px' }}
+                    onChange={(e) => { setCategory(e.target.value); setSelected([]); }}
                   >
                     <option>Team Pattern</option>
                     <option>Team Sparring</option>
                     <option>Pair Pattern</option>
                   </SelectField>
-                  <SelectField
-                    label="Age Category"
-                    name="filterAge"
-                    id="filterAge"
-                    value={filterAge}
-                    onChange={(e) => setFilterAge(e.target.value)}
-                    style={{ flex: '1 1 130px' }}
+
+                  <SelectField label="Age Category" name="filterAge" id="filterAge" value={filterAge} style={{ flex: '1 1 130px' }}
+                    onChange={(e) => { setFilterAge(e.target.value); setSelected([]); }}
                   >
                     <option value="">All Ages</option>
                     <option value="U8">U8</option>
@@ -173,13 +151,9 @@ export default function TeamBuilder() {
                     <option value="15-17">15–17</option>
                     <option value="18+">18+</option>
                   </SelectField>
-                  <SelectField
-                    label="Belt Group"
-                    name="filterBelt"
-                    id="filterBelt"
-                    value={filterBelt}
-                    onChange={(e) => setFilterBelt(e.target.value)}
-                    style={{ flex: '1 1 130px' }}
+
+                  <SelectField label="Belt Group" name="filterBelt" id="filterBelt" value={filterBelt} style={{ flex: '1 1 130px' }}
+                    onChange={(e) => { setFilterBelt(e.target.value); setSelected([]); }}
                   >
                     <option value="">All Belts</option>
                     <option value="CB">CB (8G–5G)</option>
@@ -187,13 +161,9 @@ export default function TeamBuilder() {
                     <option value="BB">BB (1D–3D)</option>
                     <option value="BB-senior">BB-Senior (4D+)</option>
                   </SelectField>
-                  <SelectField
-                    label="Gender"
-                    name="filterGender"
-                    id="filterGender"
-                    value={filterGender}
-                    onChange={(e) => setFilterGender(e.target.value)}
-                    style={{ flex: '1 1 110px' }}
+
+                  <SelectField label="Gender" name="filterGender" id="filterGender" value={filterGender} style={{ flex: '1 1 110px' }}
+                    onChange={(e) => { setFilterGender(e.target.value); setSelected([]); }}
                   >
                     <option value="">All</option>
                     <option value="M">Male</option>
@@ -201,7 +171,6 @@ export default function TeamBuilder() {
                   </SelectField>
                 </div>
 
-                {/* Eligible roster */}
                 <div className="box" style={{ padding: 0, overflow: 'hidden' }}>
                   <table className="tbl">
                     <thead>
@@ -229,13 +198,7 @@ export default function TeamBuilder() {
                             }}
                           >
                             <td>
-                              <input
-                                type="checkbox"
-                                checked={isSelected}
-                                readOnly
-                                style={{ accentColor: 'var(--gold)', width: '14px', height: '14px' }}
-                                aria-label={`Select ${c.fullName}`}
-                              />
+                              <input type="checkbox" checked={isSelected} readOnly style={{ accentColor: 'var(--gold)', width: '14px', height: '14px' }} />
                             </td>
                             <td className="name" style={{ color: isSelected ? 'var(--gold)' : undefined }}>{c.fullName}</td>
                             <td><Chip variant="default">{c.ageCategory}</Chip></td>
@@ -259,26 +222,14 @@ export default function TeamBuilder() {
 
               {/* Right — slots panel */}
               <div className="box-fill" style={{ position: 'sticky', top: '1.5rem' }}>
-                <div className="section-label" style={{ marginBottom: '0.75rem' }}>
-                  Slots Panel
-                </div>
+                <div className="section-label" style={{ marginBottom: '0.75rem' }}>Slots Panel</div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
                   <Chip variant="gold">{category}</Chip>
-                  <span
-                    style={{
-                      fontFamily: 'JetBrains Mono, monospace',
-                      fontSize: '0.75rem',
-                      color: slotStatus === 'complete' ? 'var(--ok)' : 'var(--gold)',
-                    }}
-                  >
+                  <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '0.75rem', color: slotStatus === 'complete' ? 'var(--ok)' : 'var(--gold)' }}>
                     {filled}/{slotsRequired} filled
                   </span>
-                  {filled < slotsRequired && (
-                    <span style={{ fontSize: '0.6875rem', color: 'var(--muted)' }}>
-                      · {slotsRequired - filled} more needed
-                    </span>
-                  )}
+                  {filled < slotsRequired && <span style={{ fontSize: '0.6875rem', color: 'var(--muted)' }}>· {slotsRequired - filled} more needed</span>}
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1rem' }}>
@@ -286,43 +237,18 @@ export default function TeamBuilder() {
                     const cid = selected[i]
                     const c = cid ? getSelectedCompetitor(cid) : null
                     return (
-                      <div
-                        key={i}
-                        className="box-slot"
-                        style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', minHeight: '44px' }}
-                      >
-                        <span
-                          style={{
-                            fontFamily: 'JetBrains Mono, monospace',
-                            fontSize: '0.6875rem',
-                            color: 'var(--muted-2)',
-                            width: '20px',
-                            flexShrink: 0,
-                          }}
-                        >
-                          {i + 1}
-                        </span>
+                      <div key={i} className="box-slot" style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', minHeight: '44px' }}>
+                        <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '0.6875rem', color: 'var(--muted-2)', width: '20px', flexShrink: 0 }}>{i + 1}</span>
                         {c ? (
                           <div style={{ flex: 1 }}>
                             <div style={{ fontSize: '0.8125rem', color: 'var(--ink)', fontWeight: 500 }}>{c.fullName}</div>
-                            <div style={{ fontSize: '0.6875rem', color: 'var(--muted)', fontFamily: 'JetBrains Mono, monospace' }}>
-                              {c.beltGrade} · {c.weightKg}kg
-                            </div>
+                            <div style={{ fontSize: '0.6875rem', color: 'var(--muted)', fontFamily: 'JetBrains Mono, monospace' }}>{c.beltGrade} · {c.weightKg}kg</div>
                           </div>
                         ) : (
-                          <span style={{ fontSize: '0.75rem', color: 'var(--muted-2)', fontFamily: 'JetBrains Mono, monospace' }}>
-                            — empty slot —
-                          </span>
+                          <span style={{ fontSize: '0.75rem', color: 'var(--muted-2)', fontFamily: 'JetBrains Mono, monospace' }}>— empty slot —</span>
                         )}
                         {c && (
-                          <button
-                            type="button"
-                            onClick={() => toggleCompetitor(cid)}
-                            style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', padding: '2px 4px', fontSize: '0.75rem' }}
-                            aria-label={`Remove ${c.fullName}`}
-                          >
-                            ✕
-                          </button>
+                          <button type="button" onClick={() => toggleCompetitor(cid)} style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', padding: '2px 4px', fontSize: '0.75rem' }}>✕</button>
                         )}
                       </div>
                     )
@@ -330,22 +256,17 @@ export default function TeamBuilder() {
                 </div>
 
                 <hr className="divider" />
-
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  <Btn
-                    variant="primary"
-                    type="submit"
-                    disabled={filled < slotsRequired}
+                  {/* Allow partial saves */}
+                  <Btn 
+                    variant={filled === slotsRequired ? 'primary' : 'gold-outline'} 
+                    type="submit" 
+                    disabled={filled === 0} 
                     style={{ width: '100%' }}
                   >
-                    Save Team Entry
+                    {filled === slotsRequired ? 'Save Complete Team' : 'Save Incomplete Team'}
                   </Btn>
-                  <Btn
-                    variant="ghost"
-                    type="button"
-                    onClick={() => navigate(`/events/${id}/teams`)}
-                    style={{ width: '100%' }}
-                  >
+                  <Btn variant="ghost" type="button" onClick={() => navigate(`/events/${id}/teams`)} style={{ width: '100%' }}>
                     Cancel
                   </Btn>
                 </div>

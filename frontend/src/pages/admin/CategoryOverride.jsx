@@ -12,7 +12,8 @@ import { ITF_WEIGHT_CLASSES, WT_WEIGHT_CLASSES } from '../../data/weightTemplate
 
 export default function CategoryOverride() {
   const { id } = useParams()
-  const dbEventId = id ? parseInt(id.split('-').pop(), 10) : null
+  // Matches AdminRoster parsing logic
+  const dbEventId = id ? parseInt(id.replace(/[^\d]/g, ''), 10) || id : null
   
   const [event, setEvent] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -21,11 +22,9 @@ export default function CategoryOverride() {
   const [filterGender, setFilterGender] = useState('')
   const [saved, setSaved] = useState(false)
 
-  // Fetch real event from MySQL
   useEffect(() => {
     const fetchEventData = async () => {
       try {
-        // Fetch event, custom categories simultaneously
         const [eventRes, catRes] = await Promise.all([
           fetch(`/api/events/${dbEventId}`),
           fetch(`/api/events/${dbEventId}/categories`)
@@ -37,7 +36,6 @@ export default function CategoryOverride() {
           
           const templateClasses = eventData.type === 'WT' ? WT_WEIGHT_CLASSES : ITF_WEIGHT_CLASSES;
           
-          // If the database has saved categories, apply them. Otherwise, use defaults.
           if (catRes.ok) {
             const savedCats = await catRes.json();
             if (savedCats.length > 0) {
@@ -58,7 +56,6 @@ export default function CategoryOverride() {
             }
           }
 
-          // Fallback to defaults if no custom categories exist yet
           setClasses(templateClasses.map((wc) => ({ ...wc, enabled: true, overrideMin: wc.min, overrideMax: wc.max })));
         }
       } catch (error) {
@@ -72,6 +69,7 @@ export default function CategoryOverride() {
       fetchEventData();
     }
   }, [dbEventId]);
+
   if (loading) {
     return (
       <div className="wf">
@@ -116,7 +114,8 @@ export default function CategoryOverride() {
     setClasses((prev) =>
       prev.map((wc) =>
         wc.id === wcId
-          ? { ...wc, overrideMin: wc.defaultMin, overrideMax: wc.defaultMax }
+          // FIXED: Use wc.min and wc.max instead of defaultMin/Max
+          ? { ...wc, overrideMin: wc.min, overrideMax: wc.max }
           : wc
       )
     )
@@ -140,6 +139,7 @@ export default function CategoryOverride() {
       console.error('Network error saving categories:', e);
     }
   }
+
   return (
     <div className="wf">
       <TopBar
@@ -149,9 +149,10 @@ export default function CategoryOverride() {
           { label: 'Category Overrides' },
         ]}
       />
-      <ScopeBar event={event} switchTo="/admin" />
+      <ScopeBar event={event} switchTo="/admin" isAdmin={true} />
       <div className="wf-body">
-        <SideNav sections={adminNavSections(id)} />
+        {/* FIXED: Passed event?.type into the side navigation */}
+        <SideNav sections={adminNavSections(id, event?.type)} />
         <main className="wf-main">
           <PageHead
             title="Category Overrides"
@@ -166,7 +167,6 @@ export default function CategoryOverride() {
             }
           />
 
-          {/* Filters */}
           <div className="box" style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '1rem', padding: '0.75rem 1rem' }}>
             <select
               className="field-input field-select"
@@ -214,7 +214,8 @@ export default function CategoryOverride() {
               </thead>
               <tbody>
                 {filtered.map((wc) => {
-                  const isModified = wc.overrideMin !== wc.defaultMin || wc.overrideMax !== wc.defaultMax
+                  // FIXED: Checking wc.min instead of wc.defaultMin
+                  const isModified = wc.overrideMin !== wc.min || wc.overrideMax !== wc.max
                   return (
                     <tr key={wc.id} style={{ opacity: wc.enabled ? 1 : 0.45 }}>
                       <td>
@@ -230,8 +231,9 @@ export default function CategoryOverride() {
                       <td><Chip variant="default">{wc.ageGroup}</Chip></td>
                       <td style={{ color: 'var(--muted)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.75rem' }}>{wc.gender}</td>
                       <td className="name">{wc.label}</td>
-                      <td className="mono">{wc.defaultMin === 0 ? '—' : wc.defaultMin}</td>
-                      <td className="mono">{wc.defaultMax >= 999 ? '—' : wc.defaultMax}</td>
+                      {/* FIXED: Displaying wc.min and wc.max directly */}
+                      <td className="mono">{wc.min === 0 ? '—' : wc.min}</td>
+                      <td className="mono">{wc.max >= 999 ? '—' : wc.max}</td>
                       <td>
                         <input
                           type="number"

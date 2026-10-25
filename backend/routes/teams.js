@@ -70,4 +70,41 @@ router.post('/', async (req, res) => {
   }
 });
 
+// PUT endpoint to update an existing team
+router.put('/:id', async (req, res) => {
+  try {
+    const teamId = req.params.id;
+    const { name, type, gender, ageCategory, members } = req.body;
+
+    
+    await pool.query(
+      `UPDATE teams 
+       SET name = ?, type = ?, gender = ?, ageCategory = ?
+       WHERE id = ?`,
+      [name, type, gender, ageCategory, teamId]
+    );
+
+    
+    await pool.query(
+      'DELETE FROM team_members WHERE teamId = ?',
+      [teamId]
+    );
+
+    
+    if (members && members.length > 0) {
+      for (const compId of members) {
+        await pool.query(
+          'INSERT INTO team_members (teamId, competitorId) VALUES (?, ?)', 
+          [teamId, compId]
+        );
+      }
+    }
+
+    res.status(200).json({ message: 'Team updated successfully' });
+  } catch (error) {
+    console.error('Error updating team:', error);
+    res.status(500).json({ error: 'Failed to update team' });
+  }
+});
+
 export default router;

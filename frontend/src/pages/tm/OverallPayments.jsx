@@ -10,7 +10,7 @@ export default function OverallPayments() {
   const { user } = useAuth()
   const [summaries, setSummaries] = useState([])
   const [loading, setLoading] = useState(true)
-  const [grandTotal, setGrandTotal] = useState(0)
+  const [grandTotalOutstanding, setGrandTotalOutstanding] = useState(0)
 
   useEffect(() => {
     const fetchPaymentData = async () => {
@@ -25,12 +25,20 @@ export default function OverallPayments() {
         const events = await eventsRes.json();
         const athletes = await rosterRes.json();
 
-        // Fetch teams dynamically for every event this club might be in
+        // Fetch teams and total verified payments dynamically for every event
         const teamsPromises = events.map(ev => 
           fetch(`/api/teams/event/${ev.id}/club/${user.clubCode}`)
             .then(res => res.ok ? res.json() : [])
         );
-        const teamsData = await Promise.all(teamsPromises);
+        const paymentsPromises = events.map(ev => 
+          fetch(`/api/events/${ev.id}/payments/club/${user.clubCode}/total`)
+            .then(res => res.ok ? res.json() : { totalPaid: 0 })
+        );
+
+        const [teamsData, paymentsData] = await Promise.all([
+          Promise.all(teamsPromises),
+          Promise.all(paymentsPromises)
+        ]);
 
         const athletesByEvent = {};
         athletes.forEach(ath => {
@@ -38,12 +46,13 @@ export default function OverallPayments() {
           athletesByEvent[ath.eventId].push(ath);
         });
 
-        let totalAllEvents = 0;
+        let totalOutstandingAllEvents = 0;
         const clubSummaries = [];
 
         events.forEach((ev, index) => {
           const eventAthletes = athletesByEvent[ev.id] || [];
           const eventTeams = teamsData[index] || [];
+          const eventTotalPaid = paymentsData[index]?.totalPaid || 0;
           
           if (eventAthletes.length > 0 || eventTeams.length > 0) {
             const indivRate = parseFloat(ev.individualFee || 0);
@@ -53,7 +62,9 @@ export default function OverallPayments() {
             const teamTotal = eventTeams.length * teamRate;
             const eventTotalDue = indivTotal + teamTotal;
             
-            totalAllEvents += eventTotalDue;
+            // Calculate how much is still owed for this event
+            const outstanding = Math.max(0, eventTotalDue - eventTotalPaid);
+            totalOutstandingAllEvents += outstanding;
 
             clubSummaries.push({
               eventId: ev.id,
@@ -63,13 +74,15 @@ export default function OverallPayments() {
               indivRate,
               teamRate,
               totalDue: eventTotalDue,
-              status: 'pending' 
+              totalPaid: eventTotalPaid,
+              // Check if verified payments cover the total cost
+              status: eventTotalPaid >= eventTotalDue && eventTotalDue > 0 ? 'paid' : 'pending' 
             });
           }
         });
 
         setSummaries(clubSummaries);
-        setGrandTotal(totalAllEvents);
+        setGrandTotalOutstanding(totalOutstandingAllEvents);
       } catch (error) {
         console.error("Error fetching payment data:", error);
       } finally {
@@ -95,7 +108,9 @@ export default function OverallPayments() {
             </div>
             <div className="stat-card" style={{ padding: '0.5rem 1rem', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', borderColor: 'var(--gold-soft)' }}>
                <div className="stat-card-label" style={{ color: 'var(--gold)' }}>Total Outstanding</div>
-               <div className="stat-card-value" style={{ fontSize: '1.5rem' }}>MYR {grandTotal.toFixed(2)}</div>
+               <div className="stat-card-value" style={{ fontSize: '1.5rem', color: grandTotalOutstanding === 0 ? 'var(--ok)' : 'var(--ink)' }}>
+                 MYR {grandTotalOutstanding.toFixed(2)}
+               </div>
             </div>
           </div>
 
@@ -138,7 +153,7 @@ export default function OverallPayments() {
                       </td>
                       <td className="amount-gold">MYR {summary.totalDue.toFixed(2)}</td>
                       <td>
-                        <Stamp variant={summary.status === 'paid' ? 'ok' : 'warn'}>
+                        <Stamp variant={summary.status === 'paid' ? 'ok' : 'stamp'}>
                           {summary.status.toUpperCase()}
                         </Stamp>
                       </td>

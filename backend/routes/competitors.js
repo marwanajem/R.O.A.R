@@ -6,19 +6,22 @@ const router = express.Router();
 // POST: Add a new competitor
 router.post('/', async (req, res) => {
   try {
+    
     const { 
       eventId, clubCode, fullName, icMasked, dob, gender, 
-      beltGrade, ageCategory, beltGroup, weightKg, weightCategory, patternFormat 
+      beltGrade, ageCategory, beltGroup, weightKg, 
+      weightCategory, patternFormat, isSparring, isPattern 
     } = req.body;
+
     
-    const [result] = await pool.query(
+    await pool.query(
       `INSERT INTO competitors 
-      (eventId, clubCode, fullName, icMasked, dob, gender, beltGrade, ageCategory, beltGroup, weightKg, weightCategory, patternFormat, status) 
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
-      [eventId, clubCode, fullName, icMasked, dob, gender, beltGrade, ageCategory, beltGroup, weightKg, weightCategory, patternFormat]
+       (eventId, clubCode, fullName, icMasked, dob, gender, beltGrade, ageCategory, beltGroup, weightKg, weightCategory, patternFormat, isSparring, isPattern, status) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
+      [eventId, clubCode, fullName, icMasked, dob, gender, beltGrade, ageCategory, beltGroup, weightKg, weightCategory, patternFormat, isSparring, isPattern]
     );
 
-    res.status(201).json({ success: true, message: 'Competitor added successfully', id: result.insertId });
+    res.status(201).json({ message: 'Competitor added successfully' });
   } catch (error) {
     console.error('Error adding competitor:', error);
     res.status(500).json({ error: 'Failed to add competitor' });
@@ -45,15 +48,15 @@ router.put('/:id', async (req, res) => {
   try {
     const { 
       fullName, icMasked, dob, gender, beltGrade, 
-      ageCategory, beltGroup, weightKg, weightCategory, patternFormat 
+      ageCategory, beltGroup, weightKg, weightCategory, patternFormat,isSparring, isPattern
     } = req.body;
 
     const [result] = await pool.query(
       `UPDATE competitors 
        SET fullName = ?, icMasked = ?, dob = ?, gender = ?, beltGrade = ?, 
-           ageCategory = ?, beltGroup = ?, weightKg = ?, weightCategory = ?, patternFormat = ?
+           ageCategory = ?, beltGroup = ?, weightKg = ?, weightCategory = ?, patternFormat = ?, isSparring=?, isPattern=?
        WHERE id = ?`,
-      [fullName, icMasked, dob, gender, beltGrade, ageCategory, beltGroup, weightKg, weightCategory, patternFormat, req.params.id]
+      [fullName, icMasked, dob, gender, beltGrade, ageCategory, beltGroup, weightKg, weightCategory, patternFormat,isSparring, isPattern, req.params.id]
     );
 
     if (result.affectedRows === 0) {

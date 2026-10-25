@@ -56,7 +56,10 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-app.use('/uploads', express.static('uploads'));
+
+// Serve uploaded files statically
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
 // Serve the compiled React frontend from inside the backend folder
 app.use(express.static(path.join(__dirname,'../frontend/dist')));
 

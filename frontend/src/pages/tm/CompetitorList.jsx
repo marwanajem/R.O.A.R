@@ -7,22 +7,16 @@ import PageHead from '../../components/ui/PageHead'
 import Btn from '../../components/ui/Btn'
 import Chip from '../../components/ui/Chip'
 import Stamp from '../../components/ui/Stamp'
-import { getEvent } from '../../data/events'
-import { getCompetitorsByEvent } from '../../data/competitors'
 import { useAuth } from '../../contexts/AuthContext'
 import { tmNavSections } from '../../utils/navSections'
-
-// BACKEND: delete is DELETE /api/events/:id/competitors/:cid
 
 export default function CompetitorList() {
   const { id } = useParams()
   const { user } = useAuth()
   
-
- const [event, setEvent] = useState(null)
- const [list, setList] = useState([])
- const [loading, setLoading] = useState(true)
-
+  const [event, setEvent] = useState(null)
+  const [list, setList] = useState([])
+  const [loading, setLoading] = useState(true)
   
   const [search, setSearch] = useState('')
   const [filterGender, setFilterGender] = useState('')
@@ -32,25 +26,20 @@ export default function CompetitorList() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        
         const eventRes = await fetch(`/api/events/${id}`)
         if (eventRes.ok) {
           const eventData = await eventRes.json()
           setEvent(eventData)
         }
 
-     
         if (user?.clubCode) {
           const rosterRes = await fetch(`/api/competitors/event/${id}/club/${user.clubCode}`)
           if (rosterRes.ok) {
             const rosterData = await rosterRes.json()
-            
-           
             const formattedRoster = rosterData.map(c => ({
               ...c,
               weightClass: c.weightCategory, 
             }))
-            
             setList(formattedRoster)
           }
         }
@@ -60,7 +49,6 @@ export default function CompetitorList() {
         setLoading(false)
       }
     }
-
     fetchData()
   }, [id, user?.clubCode])
 
@@ -71,19 +59,14 @@ export default function CompetitorList() {
     const matchAge = !filterAge || c.ageCategory === filterAge
     return matchSearch && matchGender && matchAge
   })
+
   async function handleDelete(cid) {
     if (confirmDelete === cid) {
       try {
-        // Corrected URL!
-        const response = await fetch(`/api/competitors/${cid}`, {
-          method: 'DELETE',
-        });
-
+        const response = await fetch(`/api/competitors/${cid}`, { method: 'DELETE' });
         if (!response.ok) throw new Error('Failed to delete');
-
         setList((prev) => prev.filter((c) => c.id !== cid));
         setConfirmDelete(null);
-        
       } catch (error) {
         console.error('Error deleting competitor:', error);
         alert('There was a problem deleting this competitor.');
@@ -93,75 +76,39 @@ export default function CompetitorList() {
     }
   }
 
-  if (loading) {
-    return (
-      <div className="wf">
-        <TopBar />
-        <div className="wf-main" style={{ padding: '2rem' }}>
-          <p style={{ color: 'var(--muted)' }}>Loading roster...</p>
-        </div>
-      </div>
-    )
-  }
+  if (loading) return <div className="wf"><TopBar /><div className="wf-main" style={{ padding: '2rem' }}><p style={{ color: 'var(--muted)' }}>Loading roster...</p></div></div>
+
+  const isClosed = event?.status === 'CLOSED';
 
   return (
     <div className="wf">
-      <TopBar
-        breadcrumbs={[
-          { label: 'Events', to: '/events' },
-          { label: event?.shortName || id, to: `/events/${id}` },
-          { label: 'Competitors' },
-        ]}
-      />
+      <TopBar breadcrumbs={[{ label: 'Events', to: '/events' }, { label: event?.shortName || id, to: `/events/${id}` }, { label: 'Competitors' }]} />
       <ScopeBar event={event} switchTo="/events" />
       <div className="wf-body">
-        <SideNav sections={tmNavSections(id)} />
+        
+        {/* CORRECTED SIDENAV */}
+        {event && <SideNav sections={tmNavSections(id, event.type)} />}
+        
         <main className="wf-main">
           <PageHead
             title="Competitors"
             sub={`${filtered.length} of ${list.length} shown`}
             right={
               <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <Btn variant="ghost" to={`/events/${id}/competitors/upload`}>Upload CSV</Btn>
-                <Btn variant="primary" to={`/events/${id}/competitors/add`}>+ Add Competitor</Btn>
+                {!isClosed && (
+                  <>
+                    <Btn variant="ghost" to={`/events/${id}/competitors/upload`}>Upload CSV</Btn>
+                    <Btn variant="primary" to={`/events/${id}/competitors/add`}>+ Add Competitor</Btn>
+                  </>
+                )}
               </div>
             }
           />
 
           <div className="box" style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '1rem', padding: '0.75rem 1rem' }}>
-            <input
-              className="field-input"
-              placeholder="Search by name or IC…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              style={{ flex: '1 1 200px', minWidth: '180px' }}
-              aria-label="Search competitors"
-            />
-            <select
-              className="field-input field-select"
-              value={filterGender}
-              onChange={(e) => setFilterGender(e.target.value)}
-              style={{ width: '130px' }}
-              aria-label="Filter by gender"
-            >
-              <option value="">All Genders</option>
-              <option value="M">Male</option>
-              <option value="F">Female</option>
-            </select>
-            <select
-              className="field-input field-select"
-              value={filterAge}
-              onChange={(e) => setFilterAge(e.target.value)}
-              style={{ width: '150px' }}
-              aria-label="Filter by age category"
-            >
-              <option value="">All Age Groups</option>
-              <option value="U8">U8</option>
-              <option value="9-11">9–11</option>
-              <option value="12-14">12–14</option>
-              <option value="15-17">15–17</option>
-              <option value="18+">18+</option>
-            </select>
+            <input className="field-input" placeholder="Search by name or IC…" value={search} onChange={(e) => setSearch(e.target.value)} style={{ flex: '1 1 200px', minWidth: '180px' }} />
+            <select className="field-input field-select" value={filterGender} onChange={(e) => setFilterGender(e.target.value)} style={{ width: '130px' }}><option value="">All Genders</option><option value="M">Male</option><option value="F">Female</option></select>
+            <select className="field-input field-select" value={filterAge} onChange={(e) => setFilterAge(e.target.value)} style={{ width: '150px' }}><option value="">All Age Groups</option><option value="U8">U8</option><option value="9-11">9–11</option><option value="12-14">12–14</option><option value="15-17">15–17</option><option value="18+">18+</option></select>
           </div>
 
           <div className="box" style={{ padding: 0, overflow: 'auto' }}>
@@ -180,7 +127,7 @@ export default function CompetitorList() {
                   <th>Weight Class</th>
                   <th>Pattern</th>
                   <th>Status</th>
-                  <th></th>
+                  {!isClosed && <th></th>}
                 </tr>
               </thead>
               <tbody>
@@ -189,9 +136,7 @@ export default function CompetitorList() {
                     <td className="mono">{c.id}</td>
                     <td className="name">{c.fullName}</td>
                     <td className="mono">{c.icMasked}</td>
-                    <td className="mono" style={{ color: 'var(--muted)' }}>
-      {c.dob ? new Date(c.dob).toLocaleDateString('en-GB') : '—'}
-    </td>
+                    <td className="mono" style={{ color: 'var(--muted)' }}>{c.dob ? new Date(c.dob).toLocaleDateString('en-GB') : '—'}</td>
                     <td style={{ color: 'var(--muted)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.75rem' }}>{c.gender}</td>
                     <td><Chip variant="ghost">{c.beltGrade}</Chip></td>
                     <td><Chip variant="default">{c.ageCategory}</Chip></td>
@@ -200,24 +145,28 @@ export default function CompetitorList() {
                     <td style={{ fontSize: '0.75rem', color: 'var(--ink-2)' }}>{c.weightClass}</td>
                     <td><Chip variant={c.patternFormat === 'Carnival' ? 'warn' : 'ghost'}>{c.patternFormat}</Chip></td>
                     <td><Stamp variant={c.status === 'confirmed' ? 'ok' : 'gold'}>{c.status}</Stamp></td>
-                    <td style={{ whiteSpace: 'nowrap', width: '1%' }}>
-                      <div style={{ display: 'flex', gap: '0.375rem', minWidth: 'max-content', justifyContent: 'flex-end' }}>
-                        <Btn variant="ghost" size="sm" to={`/events/${id}/competitors/${c.id}/edit`}>Edit</Btn>
-                        {confirmDelete === c.id ? (
-                          <>
-                            <Btn variant="stamp" size="sm" onClick={() => handleDelete(c.id)}>Confirm</Btn>
-                            <Btn variant="ghost" size="sm" onClick={() => setConfirmDelete(null)}>Cancel</Btn>
-                          </>
-                        ) : (
-                          <Btn variant="ghost" size="sm" onClick={() => handleDelete(c.id)}>Delete</Btn>
-                        )}
-                      </div>
-                    </td>
+                    
+                    {!isClosed && (
+                      <td style={{ whiteSpace: 'nowrap', width: '1%' }}>
+                        <div style={{ display: 'flex', gap: '0.375rem', minWidth: 'max-content', justifyContent: 'flex-end' }}>
+                          <Btn variant="ghost" size="sm" to={`/events/${id}/competitors/${c.id}/edit`}>Edit</Btn>
+                          {confirmDelete === c.id ? (
+                            <>
+                              <Btn variant="stamp" size="sm" onClick={() => handleDelete(c.id)}>Confirm</Btn>
+                              <Btn variant="ghost" size="sm" onClick={() => setConfirmDelete(null)}>Cancel</Btn>
+                            </>
+                          ) : (
+                            <Btn variant="ghost" size="sm" onClick={() => handleDelete(c.id)}>Delete</Btn>
+                          )}
+                        </div>
+                      </td>
+                    )}
+
                   </tr>
                 ))}
                 {filtered.length === 0 && (
                   <tr>
-                    <td colSpan={13} style={{ textAlign: 'center', padding: '2rem', color: 'var(--muted)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.75rem' }}>
+                    <td colSpan={isClosed ? 12 : 13} style={{ textAlign: 'center', padding: '2rem', color: 'var(--muted)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.75rem' }}>
                       No competitors match the current filters.
                     </td>
                   </tr>

@@ -26,12 +26,10 @@ export default function AdminEventList() {
         if (response.ok) {
           const data = await response.json();
           
-      
-         const formatDate = (val) => {
+          const formatDate = (val) => {
             if (!val) return '—';
             const d = new Date(val);
             if (isNaN(d)) return '—';
-            
             
             const year = d.getFullYear();
             const month = String(d.getMonth() + 1).padStart(2, '0');
@@ -50,12 +48,12 @@ export default function AdminEventList() {
               ruleset: ev.type,
               status: ev.status ? ev.status.toLowerCase() : 'upcoming',
               regStart: '—', 
-              regEnd: formatDate(ev.regCloseDate), // Fixed date cutoff
-              eventDate: formatDate(ev.eventDate), // Fixed date cutoff
+              regEnd: formatDate(ev.regCloseDate), 
+              eventDate: formatDate(ev.eventDate), 
               stats: { 
                 competitors: ev.competitorCount || 0, 
                 clubs: ev.clubCount || 0,            
-                pendingPayments: 0 
+                pendingPayments: ev.pendingPayments || 0 // Now pulling real data from the DB
               }, 
               categories: [] 
             };
@@ -87,7 +85,6 @@ export default function AdminEventList() {
           }
         />
 
-        {/* Summary chips */}
         <div style={{ display: 'flex', gap: '0.625rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
           <Chip variant="ok">{events.filter((e) => e.status === 'open').length} Open</Chip>
           <Chip variant="gold">{events.filter((e) => e.status === 'upcoming').length} Upcoming</Chip>
@@ -146,10 +143,11 @@ export default function AdminEventList() {
                   </td>
                   <td>
                     <div style={{ display: 'flex', gap: '0.375rem' }}>
-                      <Btn variant="ghost" size="sm" to={`/admin/events/${ev.uiId}`}>
+                      {/* Fixed routing to use rawId instead of uiId */}
+                      <Btn variant="ghost" size="sm" to={`/admin/events/${ev.rawId}`}>
                         Manage
                       </Btn>
-                      <Btn variant="ghost" size="sm" to={`/admin/events/${ev.uiId}/categories`}>
+                      <Btn variant="ghost" size="sm" to={`/admin/events/${ev.rawId}/categories`}>
                         Cats
                       </Btn>
                     </div>

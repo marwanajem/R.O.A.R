@@ -28,14 +28,15 @@ const upload = multer({
   limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
 });
 
-// GET all events (now with dynamic competitor & club counts!)
+// GET all events (now with dynamic competitor, club & payment counts!)
 router.get('/', async (req, res) => {
   try {
     const [events] = await pool.query(`
       SELECT 
         e.*,
         (SELECT COUNT(*) FROM competitors WHERE eventId = e.id) AS competitorCount,
-        (SELECT COUNT(DISTINCT clubCode) FROM competitors WHERE eventId = e.id) AS clubCount
+        (SELECT COUNT(DISTINCT clubCode) FROM competitors WHERE eventId = e.id) AS clubCount,
+        (SELECT COUNT(*) FROM payments WHERE event_id = e.id AND status = 'pending') AS pendingPayments
       FROM events e
       ORDER BY e.created_at ASC
     `);
@@ -54,7 +55,9 @@ router.get('/:id', async (req, res) => {
       SELECT 
         e.*,
         (SELECT COUNT(*) FROM competitors WHERE eventId = e.id) AS competitorCount,
-        (SELECT COUNT(DISTINCT clubCode) FROM competitors WHERE eventId = e.id) AS clubCount
+        (SELECT COUNT(DISTINCT clubCode) FROM competitors WHERE eventId = e.id) AS clubCount,
+        (SELECT COUNT(*) FROM teams WHERE eventId = e.id) AS teamCount,
+        (SELECT COALESCE(SUM(amount), 0) FROM payments WHERE event_id = e.id AND status = 'verified') AS totalCollected
       FROM events e
       WHERE e.id = ?
     `, [eventId]);
@@ -66,14 +69,20 @@ router.get('/:id', async (req, res) => {
     const ev = events[0];
     
     
+    const indivRate = parseFloat(ev.individualFee || 0);
+    const teamRate = parseFloat(ev.teamFee || 0);
+    
+    const indivTotal = (ev.competitorCount || 0) * indivRate;
+    const teamTotal = (ev.teamCount || 0) * teamRate;
+    
     const formattedEvent = {
       ...ev,
       stats: {
         competitors: ev.competitorCount || 0,
         clubs: ev.clubCount || 0,
-        teams: 0, 
-        feesCollected: 0, 
-        feesTotal: (ev.competitorCount || 0) * 60 
+        teams: ev.teamCount || 0, 
+        feesCollected: parseFloat(ev.totalCollected || 0), 
+        feesTotal: indivTotal + teamTotal 
       }
     };
 
@@ -84,37 +93,6 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// GET payments for a specific event
-router.get('/:id/payments', async (req, res) => {
-  try {
-    const eventId = req.params.id;
-
-    const [payments] = await pool.query(`
-      SELECT 
-        p.id, 
-        p.amount, 
-        p.reference_code AS ref, 
-        p.status, 
-        DATE_FORMAT(p.created_at, '%Y-%m-%d %H:%i') AS submittedAt,
-        u.clubName AS club,
-        u.clubCode
-      FROM payments p
-      JOIN users u ON p.user_id = u.id
-      WHERE p.event_id = ?
-      ORDER BY p.created_at DESC
-    `, [eventId]);
-
-    // Format the numeric DB id to match'PAY-001' style
-    const formattedPayments = payments.map(pay => ({
-      ...pay,
-      id: `PAY-${String(pay.id).padStart(3, '0')}`
-    }));
-    res.json(formattedPayments);
-  } catch (error) {
-    console.error('Error fetching payments:', error);
-    res.status(500).json({ error: 'Failed to fetch payment queue' });
-  }
-});
 
 // GET all competitors for a specific event
 router.get('/:id/competitors', async (req, res) => {
@@ -136,6 +114,8 @@ router.get('/:id/competitors', async (req, res) => {
         weightKg, 
         weightCategory AS weightClass, 
         patternFormat, 
+        isSparring,   
+        isPattern,    
         status 
       FROM competitors 
       WHERE eventId = ?
@@ -148,6 +128,37 @@ router.get('/:id/competitors', async (req, res) => {
   }
 });
 
+// PATCH: Bulk update competitors (Category Merger)
+router.patch('/:id/competitors/bulk-update', async (req, res) => {
+  try {
+    const { competitorIds, updates } = req.body;
+    const eventId = req.params.id;
+
+    if (!competitorIds || competitorIds.length === 0) {
+      return res.status(400).json({ error: 'No competitors selected' });
+    }
+
+    const setClauses = [];
+    const values = [];
+
+    
+    if (updates.weightClass) { setClauses.push('weightCategory = ?'); values.push(updates.weightClass); }
+    if (updates.ageCategory) { setClauses.push('ageCategory = ?'); values.push(updates.ageCategory); }
+    if (updates.beltGroup) { setClauses.push('beltGroup = ?'); values.push(updates.beltGroup); }
+
+    if (setClauses.length === 0) return res.status(400).json({ error: 'No updates provided' });
+
+    
+    const query = `UPDATE competitors SET ${setClauses.join(', ')} WHERE eventId = ? AND id IN (?)`;
+    values.push(eventId, competitorIds);
+
+    const [result] = await pool.query(query, values);
+    res.json({ success: true, updatedCount: result.affectedRows });
+  } catch (error) {
+    console.error('Error merging competitors:', error);
+    res.status(500).json({ error: 'Failed to merge competitors' });
+  }
+});
 // POST: Create a new championship event
 router.post('/', async (req, res) => {
   try {
@@ -236,32 +247,205 @@ router.patch('/:id/categories', async (req, res) => {
   }
 });
 
-// POST: Upload payment proof and save to database
-router.post('/:id/payments', upload.single('proofFile'), async (req, res) => {
+// GET: Total verified payments for a specific event and club
+router.get('/:id/payments/club/:clubCode/total', async (req, res) => {
   try {
-    const eventId = req.params.id;
-    const { userId, referenceCode, amount } = req.body;
+    const { id, clubCode } = req.params;
     
-   
-    const proofUrl = req.file ? `/uploads/payments/${req.file.filename}` : null;
-
-    if (!proofUrl) {
-      return res.status(400).json({ error: 'Payment proof file is required' });
-    }
-
-   
     const [result] = await pool.query(`
-      INSERT INTO payments 
-        (event_id, user_id, reference_code, amount, status, proof_url) 
-      VALUES 
-        (?, ?, ?, ?, 'pending', ?)
-    `, [eventId, userId, referenceCode, amount, proofUrl]);
+      SELECT COALESCE(SUM(amount), 0) AS totalPaid 
+      FROM payments p
+      JOIN users u ON p.user_id = u.id
+      WHERE p.event_id = ? AND u.clubCode = ? AND p.status = 'verified'
+    `, [id, clubCode]);
 
-    res.status(201).json({ success: true, paymentId: result.insertId });
+    res.json({ totalPaid: parseFloat(result[0].totalPaid) });
   } catch (error) {
-    console.error('Error saving payment:', error);
-    res.status(500).json({ error: 'Failed to submit payment' });
+    console.error('Error fetching total paid for club:', error);
+    res.status(500).json({ error: 'Failed to fetch total paid' });
   }
 });
 
+/// GET payments for a specific event
+router.get('/:id/payments', async (req, res) => {
+  try {
+    const eventId = req.params.id;
+
+    const [payments] = await pool.query(`
+      SELECT 
+        p.id, 
+        p.amount, 
+        p.reference_code AS ref, 
+        p.status, 
+        p.proof_url, 
+        DATE_FORMAT(p.created_at, '%Y-%m-%d %H:%i') AS submittedAt,
+        u.clubName AS club,
+        u.clubCode
+      FROM payments p
+      JOIN users u ON p.user_id = u.id
+      WHERE p.event_id = ?
+      ORDER BY p.created_at DESC
+    `, [eventId]);
+
+    
+    const formattedPayments = payments.map(pay => ({
+      ...pay,
+      id: `PAY-${String(pay.id).padStart(3, '0')}`
+    }));
+    res.json(formattedPayments);
+  } catch (error) {
+    console.error('Error fetching payments:', error);
+    res.status(500).json({ error: 'Failed to fetch payment queue' });
+  }
+});
+
+// PATCH: Update a payment's status (Admin only)
+router.patch('/:eventId/payments/:paymentId', async (req, res) => {
+  const connection = await pool.getConnection(); 
+  try {
+    const { status } = req.body; 
+    const eventId = req.params.eventId;
+    const rawPaymentId = parseInt(req.params.paymentId.replace('PAY-', ''), 10);
+
+    await connection.beginTransaction();
+
+    
+    const [payResult] = await connection.query(
+      'UPDATE payments SET status = ? WHERE id = ? AND event_id = ?',
+      [status, rawPaymentId, eventId]
+    );
+
+    if (payResult.affectedRows === 0) {
+      await connection.rollback();
+      return res.status(404).json({ error: 'Payment not found' });
+    }
+
+   
+    const [userRows] = await connection.query(`
+      SELECT u.clubCode 
+      FROM payments p
+      JOIN users u ON p.user_id = u.id
+      WHERE p.id = ?
+    `, [rawPaymentId]);
+
+    if (userRows.length > 0) {
+      const clubCode = userRows[0].clubCode;
+
+     
+      if (status === 'verified') {
+        await connection.query(`
+          UPDATE competitors 
+          SET status = 'confirmed' 
+          WHERE eventId = ? AND clubCode = ?
+        `, [eventId, clubCode]);
+      } 
+      
+      else if (status === 'rejected') {
+        await connection.query(`
+          UPDATE competitors 
+          SET status = 'pending' 
+          WHERE eventId = ? AND clubCode = ?
+        `, [eventId, clubCode]);
+      }
+    }
+
+    await connection.commit();
+    res.json({ success: true, message: `Payment marked as ${status} and roster updated.` });
+  } catch (error) {
+    await connection.rollback();
+    console.error('Error updating payment status:', error);
+    res.status(500).json({ error: 'Failed to process payment verification' });
+  } finally {
+    connection.release();
+  }
+});
+
+// POST: Submit a payment with a receipt image
+router.post('/:id/payments', upload.single('receipt'), async (req, res) => {
+  try {
+    const eventId = req.params.id;
+    const { amount, reference_code, user_id } = req.body;
+    
+    
+    if (!req.file) {
+      return res.status(400).json({ error: 'Receipt image is required' });
+    }
+
+    
+    const proof_url = `/uploads/payments/${req.file.filename}`;
+
+    const [result] = await pool.query(`
+      INSERT INTO payments 
+        (event_id, user_id, amount, reference_code, proof_url, status) 
+      VALUES 
+        (?, ?, ?, ?, ?, 'pending')
+    `, [eventId, user_id, amount, reference_code, proof_url]);
+
+    res.status(201).json({ 
+      success: true, 
+      paymentId: result.insertId,
+      message: 'Payment submitted successfully and is pending admin verification.' 
+    });
+
+  } catch (error) {
+    console.error('Error submitting payment:', error);
+    res.status(500).json({ error: 'Failed to submit payment' });
+  }
+});
+// PUT: Admin override for a specific competitor
+router.put('/:eventId/competitors/:competitorId', async (req, res) => {
+  try {
+    const { eventId, competitorId } = req.params;
+    
+    
+    const { 
+      weightCategory, 
+      ageCategory, 
+      beltGroup, 
+      weightKg, 
+      patternFormat, 
+      isSparring, 
+      isPattern, 
+      status 
+    } = req.body;
+
+    const [result] = await pool.query(`
+      UPDATE competitors 
+      SET weightCategory = ?, ageCategory = ?, beltGroup = ?, weightKg = ?, patternFormat = ?, isSparring = ?, isPattern = ?, status = ? 
+      WHERE id = ? AND eventId = ?
+    `, [weightCategory, ageCategory, beltGroup, weightKg, patternFormat, isSparring, isPattern, status, competitorId, eventId]);
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Competitor not found' });
+    }
+
+    res.json({ success: true, message: 'Competitor overridden successfully' });
+  } catch (error) {
+    console.error('Error overriding competitor:', error);
+    res.status(500).json({ error: 'Failed to update competitor' });
+  }
+});
+
+
+// PATCH: Update event registration status 
+router.patch('/:id/status', async (req, res) => {
+  try {
+    const eventId = req.params.id;
+    const { status } = req.body; 
+
+    const [result] = await pool.query(
+      'UPDATE events SET status = ? WHERE id = ?',
+      [status, eventId]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Event not found' });
+    }
+
+    res.json({ success: true, message: `Event is now ${status}` });
+  } catch (error) {
+    console.error('Error updating event status:', error);
+    res.status(500).json({ error: 'Failed to update event status' });
+  }
+});
 export default router;

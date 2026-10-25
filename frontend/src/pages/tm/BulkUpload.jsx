@@ -14,16 +14,18 @@ import { BELT_LABEL_MAP } from '../../utils/beltGrades'
 import { tmNavSections } from '../../utils/navSections'
 import { useAuth } from '../../contexts/AuthContext'
 
-const TEMPLATE_COLUMNS = ['Full Name', 'IC Number', 'Date of Birth', 'Gender', 'Belt Grade', 'Weight (kg)']
 
-// Updated the example row to use MM/DD/YYYY format!
+const TEMPLATE_COLUMNS = ['Full Name', 'IC Number', 'Date of Birth', 'Gender', 'Belt Grade', 'Weight (kg)', 'Sparring (Y/N)', 'Pattern (Y/N)']
+
 const EXAMPLE_ROW = [
   'Ahmad bin Ali',
   '001231-14-5678',
-  '31/12/2000', //DD/MM/YYYY
+  '31/12/2000', 
   'M',
   '3rd Dan (Black)',   
   '72',
+  'Y', // Sparring
+  'Y'  // Pattern
 ]
 
 const IC_REGEX = /^\d{6}-\d{2}-\d{4}$/
@@ -36,6 +38,10 @@ function validateRow(raw, index) {
   const gender    = raw['Gender']?.trim().toUpperCase()
   const beltLabel = raw['Belt Grade']?.trim()
   const weightRaw = raw['Weight (kg)']?.trim()
+  
+  
+  const sparringRaw = raw['Sparring (Y/N)']?.trim().toUpperCase() || 'Y'
+  const patternRaw  = raw['Pattern (Y/N)']?.trim().toUpperCase() || 'Y'
 
   if (!fullName) errors.push('Full Name is required')
 
@@ -46,7 +52,6 @@ function validateRow(raw, index) {
   if (!dobRaw) {
     errors.push('Date of Birth is required')
   } else {
-    
     const dobMatch = dobRaw.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/)
     if (!dobMatch) {
       errors.push('Date of Birth must be DD/MM/YYYY (e.g. 31/12/2000)')
@@ -59,7 +64,7 @@ function validateRow(raw, index) {
       if (isNaN(testDate.getTime())) {
         errors.push('Invalid Date of Birth')
       } else {
-        dob = `${yyyy}-${mm}-${dd}` // Standardized for backend
+        dob = `${yyyy}-${mm}-${dd}`
       }
     }
   }
@@ -81,9 +86,26 @@ function validateRow(raw, index) {
   if (!weightRaw) errors.push('Weight (kg) is required')
   else if (isNaN(weight) || weight < 10 || weight > 200) errors.push('Weight must be a number between 10 and 200')
 
+  
+  const isSparring = sparringRaw === 'Y' || sparringRaw === 'YES'
+  const isPattern = patternRaw === 'Y' || patternRaw === 'YES'
+
+  if (sparringRaw !== 'Y' && sparringRaw !== 'N' && sparringRaw !== 'YES' && sparringRaw !== 'NO') {
+    errors.push('Sparring (Y/N) must be Y or N')
+  }
+  if (patternRaw !== 'Y' && patternRaw !== 'N' && patternRaw !== 'YES' && patternRaw !== 'NO') {
+    errors.push('Pattern (Y/N) must be Y or N')
+  }
+  if (!isSparring && !isPattern) {
+    errors.push('Competitor must enter at least one event.')
+  }
+
   if (errors.length > 0) return { valid: false, errors, rowIndex: index }
 
+  
   const derived = deriveAll({ dob, gender, beltGrade: beltValue, weightKg: weight })
+  if (!isSparring) derived.weightClass = 'None'
+  if (!isPattern) derived.patternFormat = 'None'
   
   return {
     valid: true,
@@ -93,10 +115,12 @@ function validateRow(raw, index) {
       fullName,
       icNumber,
       icMasked: icNumber.substring(0, 10) + 'XXXX',
-      dob, // Sending the standardized YYYY-MM-DD to the backend
+      dob, 
       gender,
       beltGrade: beltValue,
       weightKg: weight,
+      isSparring,
+      isPattern,
       ...derived,
     },
   }
@@ -159,8 +183,11 @@ export default function BulkUpload() {
 
   async function handleSubmit() {
     try {
+      // Parse db Event ID
+      const dbEventId = parseInt(id.replace(/[^\d]/g, ''), 10) || id;
+
       const payload = validRows.map((r) => ({
-        eventId: id,
+        eventId: dbEventId,
         clubCode: user.clubCode,
         fullName: r.data.fullName,
         icMasked: r.data.icMasked,
@@ -171,7 +198,10 @@ export default function BulkUpload() {
         beltGroup: r.data.beltGroup,
         weightKg: r.data.weightKg,
         weightCategory: r.data.weightClass, 
-        patternFormat: r.data.patternFormat
+        patternFormat: r.data.patternFormat,
+        
+        isSparring: r.data.isSparring,
+        isPattern: r.data.isPattern
       }))
 
       const response = await fetch('/api/competitors/bulk', {
@@ -199,22 +229,13 @@ export default function BulkUpload() {
 
   return (
     <div className="wf">
-      <TopBar
-        breadcrumbs={[
-          { label: 'Events', to: '/events' },
-          { label: event?.shortName || id, to: `/events/${id}` },
-          { label: 'Competitors', to: `/events/${id}/competitors` },
-          { label: 'Bulk Upload' },
-        ]}
-      />
+      <TopBar breadcrumbs={[{ label: 'Events', to: '/events' }, { label: event?.shortName || id, to: `/events/${id}` }, { label: 'Competitors', to: `/events/${id}/competitors` }, { label: 'Bulk Upload' }]} />
       <ScopeBar event={event} switchTo="/events" />
       <div className="wf-body">
-        <SideNav sections={tmNavSections(id)} />
+       
+        <SideNav sections={tmNavSections(id, event?.type)} />
         <main className="wf-main">
-          <PageHead
-            title="Bulk Upload Competitors"
-            sub="Upload a filled CSV to register multiple competitors at once"
-          />
+          <PageHead title="Bulk Upload Competitors" sub="Upload a filled CSV to register multiple competitors at once" />
 
           {submitted ? (
             <div className="box" style={{ textAlign: 'center', padding: '2.5rem' }}>
@@ -233,7 +254,7 @@ export default function BulkUpload() {
                 <div className="section-label" style={{ marginBottom: '0.875rem' }}>Step 1 — Get the Template</div>
                 <p style={{ fontSize: '0.8125rem', color: 'var(--ink-2)', marginBottom: '1rem' }}>
                   Download the CSV template, fill in your competitors, then upload below.
-                  Do not change the column headers. For Belt Grade, use the exact label from the template (e.g. <span style={{ fontFamily: 'JetBrains Mono, monospace' }}>3rd Dan (Black)</span>).
+                  Do not change the column headers. For Belt Grade, use the exact label from the template.
                 </p>
                 <Btn variant="ghost" type="button" onClick={downloadTemplate}>Download CSV Template</Btn>
               </div>
@@ -241,15 +262,7 @@ export default function BulkUpload() {
               <div className="box" style={{ marginBottom: '1rem' }}>
                 <div className="section-label" style={{ marginBottom: '0.875rem' }}>Step 2 — Upload Filled CSV</div>
                 <div className="field-group">
-                  <input
-                    ref={fileRef}
-                    type="file"
-                    accept=".csv"
-                    className={`field-input ${fileError ? 'error' : ''}`}
-                    style={{ paddingTop: '0.4rem' }}
-                    onChange={handleFile}
-                    aria-label="Upload CSV file"
-                  />
+                  <input ref={fileRef} type="file" accept=".csv" className={`field-input ${fileError ? 'error' : ''}`} style={{ paddingTop: '0.4rem' }} onChange={handleFile} aria-label="Upload CSV file" />
                   <span className="field-hint">Only .csv files using the template above</span>
                   {fileError && <span className="field-error">{fileError}</span>}
                 </div>
@@ -300,8 +313,7 @@ export default function BulkUpload() {
                             <th>Name</th>
                             <th>IC (Masked)</th>
                             <th>G</th>
-                            <th>Belt</th>
-                            <th>Age Cat.</th>
+                            <th>Events</th>
                             <th>Belt Group</th>
                             <th>Wt (kg)</th>
                             <th>Weight Class</th>
@@ -316,12 +328,17 @@ export default function BulkUpload() {
                               <td className="name">{r.data.fullName}</td>
                               <td className="mono">{r.data.icMasked}</td>
                               <td style={{ color: 'var(--muted)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.75rem' }}>{r.data.gender}</td>
-                              <td><Chip variant="ghost">{r.data.beltGrade}</Chip></td>
-                              <td><Chip variant="default">{r.data.ageCategory}</Chip></td>
+                              {/* NEW: Displays exactly what they signed up for */}
+                              <td>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
+                                  {r.data.isSparring ? <Chip variant="ghost">Sparring</Chip> : null}
+                                  {r.data.isPattern ? <Chip variant="ghost">Pattern</Chip> : null}
+                                </div>
+                              </td>
                               <td><Chip variant="gold">{r.data.beltGroup}</Chip></td>
                               <td className="mono">{r.data.weightKg}</td>
                               <td style={{ fontSize: '0.75rem', color: 'var(--ink-2)' }}>{r.data.weightClass}</td>
-                              <td><Chip variant={r.data.patternFormat === 'Carnival' ? 'warn' : 'ghost'}>{r.data.patternFormat || '—'}</Chip></td>
+                              <td><Chip variant={r.data.patternFormat === 'Carnival' ? 'warn' : r.data.patternFormat === 'None' ? 'default' : 'ghost'}>{r.data.patternFormat || '—'}</Chip></td>
                               <td>
                                 <Btn variant="ghost" size="sm" onClick={() => removeRow(r.rowIndex)}>Remove</Btn>
                               </td>

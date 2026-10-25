@@ -3,7 +3,7 @@
  *
  * Usage:
  *   Top-level TM:    <SideNav sections={tmTopNavSections()} />
- *   Event-level TM:  <SideNav sections={tmNavSections(eventId)} />
+ *   Event-level TM:  <SideNav sections={tmNavSections(eventId, event?.type)} />
  *   Top-level Admin: <SideNav sections={adminTopNavSections()} />
  *   Event Admin:     <SideNav sections={adminNavSections(eventId)} />
  */
@@ -29,8 +29,20 @@ export function tmTopNavSections() {
   ]
 }
 
-export function tmNavSections(eventId) {
+export function tmNavSections(eventId, eventType = 'WT') {
   const base = `/events/${eventId}`
+  
+  // Dynamically swap terminology based on the rulebook
+  const categoryItems = eventType === 'ITF' 
+    ? [
+        { to: `${base}/sparring`, label: 'Sparring' },
+        { to: `${base}/pattern`,  label: 'Pattern' },
+      ]
+    : [
+        { to: `${base}/kyorugi`,  label: 'Kyorugi' },
+        { to: `${base}/poomsae`,  label: 'Poomsae' },
+      ];
+
   return [
     {
       label: 'Event',
@@ -40,8 +52,12 @@ export function tmNavSections(eventId) {
       label: 'Registration',
       items: [
         { to: `${base}/competitors`, label: 'Competitors' },
-        { to: `${base}/teams`,       label: 'Teams & Pairs' },
+        { to: `${base}/teams`,       label: 'Teams & Pairs' }, 
       ],
+    },
+    {
+      label: 'Categories',
+      items: categoryItems,
     },
     {
       label: 'Payment',

@@ -34,7 +34,7 @@ export default function FeesPayment() {
   const [loading, setLoading] = useState(true)
   
   const [fileError, setFileError] = useState('')
-  const [submitted, setSubmitted] = useState(false)
+  const [paymentState, setPaymentState] = useState(null) // Stores full payment object (status, amount, etc)
 
  useEffect(() => {
     const fetchData = async () => {
@@ -54,11 +54,13 @@ export default function FeesPayment() {
         if (compRes.ok) setCompetitors(await compRes.json())
         if (teamRes.ok) setTeams(await teamRes.json())
         
-        // Check if this club already submitted a payment
+        // Find if this club has submitted a payment and store the ENTIRE object to read the status
         if (paymentsRes.ok) {
           const payments = await paymentsRes.json()
           const myPayment = payments.find(p => p.clubCode === user?.clubCode)
-          if (myPayment) setSubmitted(true)
+          if (myPayment) {
+            setPaymentState(myPayment)
+          }
         }
       } catch (error) {
         console.error('Failed to load invoice data:', error)
@@ -71,7 +73,6 @@ export default function FeesPayment() {
 
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm()
 
-  // FIXED: Dynamically read the fees from the database, fallback to 0 if loading
   const indivRate = parseFloat(event?.individualFee || 0)
   const teamRate = parseFloat(event?.teamFee || 0)
   
@@ -87,7 +88,6 @@ export default function FeesPayment() {
     return true
   }
 
-  // FIXED: Implemented actual FormData upload to match backend
   const onSubmit = async (data) => {
     const fileValidation = validateFile(data.proofFile)
     if (fileValidation !== true) {
@@ -108,19 +108,26 @@ export default function FeesPayment() {
         body: formData, 
       })
       if (!response.ok) throw new Error('Failed to upload payment proof')
-      setSubmitted(true)
+      
+      // Optimistically update the UI to show pending
+      setPaymentState({ status: 'pending', amount: data.paymentAmount })
     } catch (error) {
       console.error(error)
       setFileError('Upload failed. Please try again.')
     }
   }
 
+  // Derive booleans based on the database status
+  const isSubmitted = !!paymentState
+  const isVerified = paymentState?.status === 'verified'
+  const isRejected = paymentState?.status === 'rejected'
+
   const timelineItems = [
     { label: 'Registration open', done: true, date: config.regStart },
     { label: 'Competitors registered', done: competitors.length > 0, date: null },
-    { label: 'Payment submitted', done: submitted, active: !submitted, date: null },
-    { label: 'Payment verified by admin', done: false, date: null },
-    { label: 'Registration confirmed', done: false, date: null },
+    { label: 'Payment submitted', done: isSubmitted && !isRejected, active: !isSubmitted || isRejected, date: null },
+    { label: 'Payment verified by admin', done: isVerified, active: isSubmitted && !isVerified && !isRejected, date: null },
+    { label: 'Registration confirmed', done: isVerified, date: null }, // Automatically confirmed when paid
   ]
 
   if (loading) {
@@ -139,7 +146,7 @@ export default function FeesPayment() {
       <TopBar breadcrumbs={[{ label: 'Events', to: '/events' }, { label: event?.shortName || id, to: `/events/${id}` }, { label: 'Fees & Payment' }]} />
       <ScopeBar event={event} switchTo="/events" />
       <div className="wf-body">
-        <SideNav sections={tmNavSections(id)} />
+        <SideNav sections={tmNavSections(id, event?.type)} />
         <main className="wf-main">
           <PageHead title="Fees & Payment" sub="Submit bank transfer proof for admin verification" />
 
@@ -199,9 +206,17 @@ export default function FeesPayment() {
                 </div>
               </div>
 
-              {!submitted ? (
+              {/* RENDER DYNAMIC MESSAGE BASED ON PAYMENT STATUS */}
+              {!isSubmitted || isRejected ? (
                 <div className="box">
                   <div className="section-label">Upload Payment Proof</div>
+                  {isRejected && (
+                    <div style={{ padding: '0.75rem', marginBottom: '1rem', background: 'rgba(240, 112, 96, 0.1)', border: '1px solid var(--stamp)', borderRadius: '4px' }}>
+                      <p style={{ margin: 0, fontSize: '0.8125rem', color: 'var(--stamp)' }}>
+                        Your previous payment proof was rejected by the admin. Please upload a new valid receipt.
+                      </p>
+                    </div>
+                  )}
                   <form onSubmit={handleSubmit(onSubmit)} noValidate>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                       <Field
@@ -239,10 +254,25 @@ export default function FeesPayment() {
                     </Btn>
                   </form>
                 </div>
+              ) : isVerified ? (
+                <div className="box" style={{ textAlign: 'center', padding: '2.5rem' }}>
+                  <Stamp variant="ok" style={{ fontSize: '1rem', marginBottom: '0.75rem' }}>Verified</Stamp>
+                  <p style={{ color: 'var(--ink-2)', marginTop: '0.75rem', fontSize: '0.9rem' }}>
+                    Your payment of MYR {paymentState.amount} has been fully verified by the administrator. 
+                  </p>
+                  <p style={{ color: 'var(--muted-2)', marginTop: '0.5rem', fontSize: '0.8rem' }}>
+                    Your registration for this event is confirmed.
+                  </p>
+                </div>
               ) : (
-                <div className="box" style={{ textAlign: 'center', padding: '2rem' }}>
-                  <Stamp variant="ok" style={{ fontSize: '1rem', marginBottom: '0.75rem' }}>Submitted</Stamp>
-                  <p style={{ color: 'var(--ink-2)', marginTop: '0.75rem' }}>Payment proof submitted. Awaiting admin verification.</p>
+                <div className="box" style={{ textAlign: 'center', padding: '2.5rem' }}>
+                  <Stamp variant="gold" style={{ fontSize: '1rem', marginBottom: '0.75rem' }}>Pending</Stamp>
+                  <p style={{ color: 'var(--ink-2)', marginTop: '0.75rem', fontSize: '0.9rem' }}>
+                    Payment proof submitted successfully.
+                  </p>
+                  <p style={{ color: 'var(--muted-2)', marginTop: '0.5rem', fontSize: '0.8rem' }}>
+                    Your receipt is currently awaiting admin verification.
+                  </p>
                 </div>
               )}
             </div>
