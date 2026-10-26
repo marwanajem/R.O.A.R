@@ -32,6 +32,9 @@ import AdminRoster from './pages/admin/AdminRoster'
 import CategoryOverride from './pages/admin/CategoryOverride'
 import WeightTemplates from './pages/admin/WeightTemplates'
 
+//Shared pages
+import Profile from './pages/shared/Profile'
+
 // Misc
 import NotFound from './pages/NotFound'
 
@@ -72,6 +75,12 @@ export default function App() {
             <Route path="/admin/events/:id/roster" element={<ProtectedRoute requiredRole="ADMIN"><AdminRoster /></ProtectedRoute>} />
             <Route path="/admin/events/:id/categories" element={<ProtectedRoute requiredRole="ADMIN"><CategoryOverride /></ProtectedRoute>} />
             
+            {/* Shared routes */}
+            {/* Team Manager profile  */}
+            <Route path="/profile" element={<ProtectedRoute allowedRoles={['team_manager']}><Profile /></ProtectedRoute>} />
+            {/* Admin profile */}
+            <Route path="/admin/profile" element={<ProtectedRoute allowedRoles={['admin']}><Profile /></ProtectedRoute>} />
+
             {/* Default redirects */}
             <Route path="/" element={<Navigate to="/login" replace />} />
             <Route path="*" element={<NotFound />} />

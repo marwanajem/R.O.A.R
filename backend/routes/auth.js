@@ -56,8 +56,10 @@ router.post('/login', async (req, res) => {
     }
 
     
+    const userCreatedAt = user.created_at || user.createdAt;
+
     const token = jwt.sign(
-      { id: user.id, role: user.role },
+      { id: user.id, role: user.role, createdAt: userCreatedAt },
       process.env.JWT_SECRET,
       { expiresIn: '1d' }
     );
@@ -66,7 +68,7 @@ router.post('/login', async (req, res) => {
     res.json({
       message: 'Login successful',
       token,
-      user: { id: user.id, email: user.email, role: user.role.toUpperCase(), name: user.name, clubName: user.clubName, clubCode: user.clubCode }
+      user: { id: user.id, email: user.email, role: user.role.toUpperCase(), name: user.name, clubName: user.clubName, clubCode: user.clubCode, createdAt:userCreatedAt }
     });
   } catch (error) {
     console.error(error);
@@ -74,6 +76,40 @@ router.post('/login', async (req, res) => {
   }
 });
 
+// PUT: Update Profile Name & Email
+router.put('/profile', async (req, res) => {
+  const { userId, name, email } = req.body;
+  try {
+    await pool.query('UPDATE users SET name = ?, email = ? WHERE id = ?', [name, email, userId]);
+    res.json({ success: true, message: 'Profile updated' });
+  } catch (err) {
+    console.error('Profile update error:', err);
+    res.status(500).json({ error: 'Failed to update profile. Email may already be in use.' });
+  }
+});
 
+// PUT: Update Password
+router.put('/password', async (req, res) => {
+  const { userId, currentPassword, newPassword } = req.body;
+  try {
+    
+    const [users] = await pool.query('SELECT password FROM users WHERE id = ?', [userId]);
+    if (users.length === 0) return res.status(404).json({ error: 'User not found' });
+
+    
+    const isMatch = await bcrypt.compare(currentPassword, users[0].password);
+    if (!isMatch) return res.status(401).json({ error: 'Incorrect current password' });
+
+    // hash the new password 
+    const salt = await bcrypt.genSalt(10);
+    const hashedPw = await bcrypt.hash(newPassword, salt);
+    
+    await pool.query('UPDATE users SET password = ? WHERE id = ?', [hashedPw, userId]);
+    res.json({ success: true, message: 'Password updated successfully' });
+  } catch (err) {
+    console.error('Password update error:', err);
+    res.status(500).json({ error: 'Failed to update password' });
+  }
+});
 
 export default router;

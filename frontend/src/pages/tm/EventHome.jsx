@@ -81,7 +81,6 @@ export default function EventHome() {
       <ScopeBar event={event} switchTo="/events" />
       <div className="wf-body">
         
-        {/* CORRECT SIDENAV PLACEMENT */}
         <SideNav sections={tmNavSections(id, event?.type)} />
         
         <main className="wf-main">
@@ -106,7 +105,7 @@ export default function EventHome() {
                   </div>
                 )}
                 
-                {/* Only show the Add button if registration is OPEN */}
+             
                 {!isClosed && (
                   <Btn variant="primary" to={`/events/${id}/competitors/add`}>
                     + Add Competitor
@@ -194,7 +193,7 @@ export default function EventHome() {
               </tbody>
             </table>
             
-            {/* Only show the Payment button if registration is OPEN */}
+            
             {!isClosed && (
               <div style={{ marginTop: '1rem' }}>
                 <Btn variant="gold-outline" to={`/events/${id}/fees`}>

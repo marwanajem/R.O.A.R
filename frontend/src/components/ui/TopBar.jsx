@@ -36,15 +36,22 @@ export default function TopBar({ breadcrumbs = [] }) {
             {user.role === 'ADMIN' ? 'Super Admin' : 'Team Manager'}
           </Chip>
         )}
-        {user && (
-          <span style={{ color: 'var(--ink-2)', fontSize: '0.8125rem' }}>
+        <Link 
+            to={user.role === 'ADMIN' || user.role === 'admin' ? '/admin/profile' : '/profile'}
+            className="btn btn-ghost btn-sm"
+            style={{ textTransform: 'uppercase' }}
+           
+            onMouseOver={(e) => e.target.style.color = 'var(--gold)'}
+            onMouseOut={(e) => e.target.style.color = 'var(--ink-2)'}
+          >
             {user.name}
-          </span>
-        )}
+          </Link>
         <button
           onClick={logout}
           className="btn btn-ghost btn-sm"
           aria-label="Sign out"
+          onMouseOver={(e) => e.target.style.color = 'var(--gold)'}
+          onMouseOut={(e) => e.target.style.color = 'var(--ink-2)'}
         >
           Sign out
         </button>

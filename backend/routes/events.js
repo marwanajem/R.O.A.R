@@ -331,10 +331,17 @@ router.patch('/:eventId/payments/:paymentId', async (req, res) => {
     if (userRows.length > 0) {
       const clubCode = userRows[0].clubCode;
 
-     
+
       if (status === 'verified') {
         await connection.query(`
           UPDATE competitors 
+          SET status = 'confirmed' 
+          WHERE eventId = ? AND clubCode = ?
+        `, [eventId, clubCode]);
+        
+        
+        await connection.query(`
+          UPDATE teams 
           SET status = 'confirmed' 
           WHERE eventId = ? AND clubCode = ?
         `, [eventId, clubCode]);
@@ -343,6 +350,13 @@ router.patch('/:eventId/payments/:paymentId', async (req, res) => {
       else if (status === 'rejected') {
         await connection.query(`
           UPDATE competitors 
+          SET status = 'pending' 
+          WHERE eventId = ? AND clubCode = ?
+        `, [eventId, clubCode]);
+
+        
+        await connection.query(`
+          UPDATE teams 
           SET status = 'pending' 
           WHERE eventId = ? AND clubCode = ?
         `, [eventId, clubCode]);
@@ -361,17 +375,23 @@ router.patch('/:eventId/payments/:paymentId', async (req, res) => {
 });
 
 // POST: Submit a payment with a receipt image
-router.post('/:id/payments', upload.single('receipt'), async (req, res) => {
+router.post('/:id/payments', upload.single('proofFile'), async (req, res) => {
   try {
     const eventId = req.params.id;
-    const { amount, reference_code, user_id } = req.body;
     
+    
+    const amount = req.body.amount;
+    const userId = req.body.userId || req.body.user_id;
+    const referenceCode = req.body.referenceCode || req.body.reference_code;
     
     if (!req.file) {
       return res.status(400).json({ error: 'Receipt image is required' });
     }
 
-    
+    if (!userId) {
+      return res.status(400).json({ error: 'User ID is missing from the submission' });
+    }
+
     const proof_url = `/uploads/payments/${req.file.filename}`;
 
     const [result] = await pool.query(`
@@ -379,7 +399,7 @@ router.post('/:id/payments', upload.single('receipt'), async (req, res) => {
         (event_id, user_id, amount, reference_code, proof_url, status) 
       VALUES 
         (?, ?, ?, ?, ?, 'pending')
-    `, [eventId, user_id, amount, reference_code, proof_url]);
+    `, [eventId, userId, amount, referenceCode, proof_url]);
 
     res.status(201).json({ 
       success: true, 
@@ -392,6 +412,7 @@ router.post('/:id/payments', upload.single('receipt'), async (req, res) => {
     res.status(500).json({ error: 'Failed to submit payment' });
   }
 });
+
 // PUT: Admin override for a specific competitor
 router.put('/:eventId/competitors/:competitorId', async (req, res) => {
   try {
