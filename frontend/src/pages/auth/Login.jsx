@@ -1,9 +1,43 @@
-import React, { useState } from 'react'
+import React, { useState, forwardRef } from 'react'
 import { useNavigate, Link, useLocation } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { useAuth } from '../../contexts/AuthContext'
 import Field from '../../components/ui/Field'
 import Btn from '../../components/ui/Btn'
+
+// New: Custom Password Field with Show/Hide Toggle (Compatible with react-hook-form)
+const PasswordField = forwardRef(({ label, id, error, placeholder, autoComplete, ...rest }, ref) => {
+  const [show, setShow] = useState(false)
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
+      <label className="field-label" htmlFor={id} style={{ marginBottom: '4px' }}>{label}</label>
+      <div style={{ position: 'relative' }}>
+        <input 
+          type={show ? "text" : "password"}
+          id={id}
+          ref={ref}
+          autoComplete={autoComplete}
+          className="field-input" 
+          placeholder={placeholder}
+          style={{ paddingRight: '4rem', width: '100%' }} 
+          {...rest} 
+        />
+        <button 
+          type="button"
+          onClick={() => setShow(!show)}
+          style={{
+            position: 'absolute', right: '0.5rem', top: '50%', transform: 'translateY(-50%)',
+            background: 'transparent', border: 'none', color: 'var(--muted)', cursor: 'pointer',
+            fontSize: '0.75rem', fontFamily: 'JetBrains Mono, monospace', fontWeight: 600
+          }}
+        >
+          {show ? 'HIDE' : 'SHOW'}
+        </button>
+      </div>
+      {error && <span style={{ color: '#f07060', fontSize: '0.75rem', marginTop: '4px' }}>{error}</span>}
+    </div>
+  )
+})
 
 export default function Login() {
   const { login } = useAuth()
@@ -58,7 +92,7 @@ export default function Login() {
               type="email"
               autoComplete="email"
               required
-              placeholder="tm@yourclub.my"
+              placeholder="you@example.com"
               error={errors.email?.message}
               {...register('email', {
                 required: 'Email is required.',
@@ -68,13 +102,11 @@ export default function Login() {
                 },
               })}
             />
-            <Field
+            
+            <PasswordField
               label="Password"
-              name="password"
               id="password"
-              type="password"
               autoComplete="current-password"
-              required
               placeholder="••••••••"
               error={errors.password?.message}
               {...register('password', {
