@@ -73,7 +73,9 @@ export default function EventHome() {
   if (!event) return <div className="wf"><TopBar /><div className="wf-main" style={{ padding: '2rem' }}><p style={{ color: 'var(--muted)' }}>Event not found.</p></div></div>
 
   const feesDue = myCompetitors.length * event.fees.individual + myTeams.length * event.fees.team
-  const isClosed = event.status === 'CLOSED';
+  
+  // FIXED: Lock down actions for both CLOSED and ARCHIVED events
+  const isRegistrationClosed = ['CLOSED', 'ARCHIVED'].includes(event.status?.toUpperCase());
 
   return (
     <div className="wf">
@@ -90,7 +92,7 @@ export default function EventHome() {
             sub={event.venue}
             right={
               <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                {isClosed && (
+                {isRegistrationClosed && (
                   <div style={{ 
                     padding: '0.4rem 0.75rem', 
                     borderRadius: '4px', 
@@ -101,12 +103,11 @@ export default function EventHome() {
                     color: '#FF4B4B',
                     border: '1px solid rgba(255, 75, 75, 0.3)'
                   }}>
-                    REGISTRATION CLOSED
+                    {event.status?.toUpperCase() === 'ARCHIVED' ? 'EVENT ARCHIVED' : 'REGISTRATION CLOSED'}
                   </div>
                 )}
                 
-             
-                {!isClosed && (
+                {!isRegistrationClosed && (
                   <Btn variant="primary" to={`/events/${id}/competitors/add`}>
                     + Add Competitor
                   </Btn>
@@ -193,8 +194,7 @@ export default function EventHome() {
               </tbody>
             </table>
             
-            
-            {!isClosed && (
+            {!isRegistrationClosed && (
               <div style={{ marginTop: '1rem' }}>
                 <Btn variant="gold-outline" to={`/events/${id}/fees`}>
                   Submit Payment Proof →

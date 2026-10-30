@@ -31,10 +31,13 @@ export default function EventPicker() {
   const [loading, setLoading] = useState(true)
   const [searchParams] = useSearchParams() 
   
-  
   const [selectedUpcoming, setSelectedUpcoming] = useState(null)
   
+  // URL Sidebar Filter (all, open, upcoming, past)
   const currentFilter = searchParams.get('filter') || 'all'
+  
+  // Ruleset Tab Filter (ALL, ITF, WT)
+  const [rulesetFilter, setRulesetFilter] = useState('ALL')
 
   useEffect(() => {
     const fetchEvents = async () => {
@@ -45,12 +48,10 @@ export default function EventPicker() {
         const liveEvents = data.map(ev => {
           let computedStatus = ev.status.toLowerCase();
           
-         
           const now = new Date();
           const regCloseDate = new Date(ev.regCloseDate);
           const eventDate = new Date(ev.eventDate);
 
-          
           now.setHours(0,0,0,0);
           regCloseDate.setHours(0,0,0,0);
           eventDate.setHours(0,0,0,0);
@@ -84,11 +85,15 @@ export default function EventPicker() {
     fetchEvents()
   }, [])
 
+  // 1. First filter by the selected Ruleset Tab (ITF vs WT)
+  const rulesetFilteredEvents = events.filter(e => rulesetFilter === 'ALL' || e.ruleset === rulesetFilter)
   
-  const openEvents = events.filter((e) => e.status === 'open')
-  const upcomingEvents = events.filter((e) => e.status === 'upcoming' || e.status === 'closed') 
-  const pastEvents = events.filter((e) => e.status === 'archived')
+  // 2. Then group them by their statuses
+  const openEvents = rulesetFilteredEvents.filter((e) => e.status === 'open')
+  const upcomingEvents = rulesetFilteredEvents.filter((e) => e.status === 'upcoming' || e.status === 'closed') 
+  const pastEvents = rulesetFilteredEvents.filter((e) => e.status === 'archived')
 
+  // 3. Assemble sections based on the Sidebar Filter
   let sectionsToShow = []
   if (currentFilter === 'all') {
     sectionsToShow = [
@@ -106,7 +111,6 @@ export default function EventPicker() {
 
   sectionsToShow = sectionsToShow.filter(sec => sec.data.length > 0)
 
-  // Render a Single Event Card
   const renderCard = (ev) => {
     return (
       <div
@@ -156,17 +160,58 @@ export default function EventPicker() {
       <div className="wf-body">
         <SideNav sections={tmTopNavSections()} />
         <div className="wf-main" style={{ padding: '2rem' }}>
-          <div className="page-head">
+          
+          <div className="page-head" style={{ marginBottom: '1.5rem' }}>
             <div>
               <h2>{currentFilter === 'all' ? 'Select Event' : `${currentFilter.charAt(0).toUpperCase() + currentFilter.slice(1)} Events`}</h2>
               <p className="page-head-sub">Welcome back, {user?.name} · {user?.clubName}</p>
             </div>
           </div>
 
+          {/* Color-Coded ITF / WT Tabs Filter */}
+          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '2rem', borderBottom: '1px solid var(--line)', paddingBottom: '1rem' }}>
+            {['ALL', 'ITF', 'WT'].map(tab => {
+              const isActive = rulesetFilter === tab;
+              
+              // Default to Gold for ALL and ITF
+              let bg = isActive ? 'rgba(212, 175, 55, 0.1)' : 'transparent';
+              let color = isActive ? 'var(--gold)' : 'var(--muted)';
+              let border = isActive ? 'rgba(212, 175, 55, 0.3)' : 'transparent';
+
+              // Override to crisp Blue for WT
+              if (tab === 'WT' && isActive) {
+                bg = 'rgba(59, 130, 246, 0.1)';      
+                color = '#60A5FA';                   
+                border = 'rgba(59, 130, 246, 0.3)';  
+              }
+
+              return (
+                <button
+                  key={tab}
+                  onClick={() => setRulesetFilter(tab)}
+                  style={{
+                    background: bg,
+                    color: color,
+                    border: `1px solid ${border}`,
+                    padding: '0.4rem 1.25rem',
+                    borderRadius: '4px',
+                    fontSize: '0.8125rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    fontFamily: 'JetBrains Mono, monospace',
+                    transition: 'all 0.2s ease'
+                  }}
+                >
+                  {tab === 'ALL' ? 'ALL EVENTS' : tab}
+                </button>
+              )
+            })}
+          </div>
+
           {loading ? (
             <div style={{ padding: '2rem 0', color: 'var(--muted)' }}>Loading live events...</div>
           ) : sectionsToShow.length === 0 ? (
-            <div style={{ padding: '2rem 0', color: 'var(--muted)' }}>No events found for this category.</div>
+            <div style={{ padding: '2rem 0', color: 'var(--muted)' }}>No {rulesetFilter !== 'ALL' ? rulesetFilter : ''} events found for this category.</div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '2.5rem' }}>
               {sectionsToShow.map((section, idx) => (
@@ -178,7 +223,7 @@ export default function EventPicker() {
                       {section.data.map((ev) => (
                         <Link key={ev.id} to={`/events/${ev.id}`} style={{ textDecoration: 'none' }}>
                           <div className="box" style={{ display: 'flex', alignItems: 'center', gap: '1rem', opacity: 0.65 }}>
-                            <Chip variant="default">{ev.ruleset}</Chip>
+                            <Chip variant={ev.ruleset === 'WT' ? 'blue' : 'default'}>{ev.ruleset}</Chip>
                             <span style={{ color: 'var(--ink-2)', fontSize: '0.875rem', flex: 1 }}>{ev.name}</span>
                             <span style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>{formatDate(ev.eventDate)}</span>
                             <Stamp variant="default">Archived</Stamp>
@@ -213,7 +258,7 @@ export default function EventPicker() {
         </div>
       </div>
 
-     
+      {/* UPCOMING MODAL OVERLAY */}
       {selectedUpcoming && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.8)', zIndex: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
           <div className="box" style={{ width: '100%', maxWidth: '450px', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>

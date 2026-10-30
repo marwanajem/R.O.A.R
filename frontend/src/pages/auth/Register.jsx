@@ -94,6 +94,9 @@ export default function Register() {
     if (!isPasswordValid) {
       return setServerError('Please meet all password security requirements.')
     }
+    if (data.password !== data.confirmPassword) {
+      return setServerError('Passwords do not match.')
+    }
 
     try {
       const res = await fetch('/api/auth/register', {

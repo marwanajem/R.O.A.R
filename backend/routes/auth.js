@@ -149,13 +149,20 @@ router.post('/login', async (req, res) => {
 
 // 5. UPDATE PROFILE
 router.put('/profile', async (req, res) => {
-  const { userId, name, email } = req.body;
+  const { userId, name, email, clubName, password } = req.body;
   try {
-    await pool.query('UPDATE users SET name = ?, email = ? WHERE id = ?', [name, email, userId]);
-    res.json({ success: true, message: 'Profile updated' });
+    // authenticate the user's password before allowing changes
+    const [users] = await pool.query('SELECT password FROM users WHERE id = ?', [userId]);
+    if (users.length === 0) return res.status(404).json({ error: 'User not found' });
+
+    const isMatch = await bcrypt.compare(password, users[0].password);
+    if (!isMatch) return res.status(401).json({ error: 'Incorrect password. Profile changes unauthorized.' });
+
+    await pool.query('UPDATE users SET name = ?, email = ?, clubName = ? WHERE id = ?', [name, email, clubName, userId]);
+    res.json({ success: true, message: 'Profile updated successfully' });
   } catch (err) {
     console.error('Profile update error:', err);
-    res.status(500).json({ error: 'Failed to update profile. Email may already be in use.' });
+    res.status(500).json({ error: 'Failed to update profile. That email may already be in use.' });
   }
 });
 
