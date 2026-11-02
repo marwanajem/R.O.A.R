@@ -31,6 +31,7 @@ import AdminEventDashboard from './pages/admin/AdminEventDashboard'
 import AdminRoster from './pages/admin/AdminRoster'
 import CategoryOverride from './pages/admin/CategoryOverride'
 import WeightTemplates from './pages/admin/WeightTemplates'
+import PatternTemplates from './pages/admin/PatternTemplates'
 import EditEvent from './pages/admin/EditEvent' 
 
 //Shared pages
@@ -70,6 +71,7 @@ export default function App() {
             {/* Admin routes */}
             <Route path="/admin" element={<ProtectedRoute requiredRole="ADMIN"><AdminEventList /></ProtectedRoute>} />
             <Route path="/admin/weight-templates" element={<ProtectedRoute requiredRole="ADMIN"><WeightTemplates /></ProtectedRoute>} />
+            <Route path="/admin/pattern-templates" element={<ProtectedRoute requiredRole="ADMIN"><PatternTemplates/></ProtectedRoute>} />
             <Route path="/admin/events/new" element={<ProtectedRoute requiredRole="ADMIN"><CreateEvent /></ProtectedRoute>} />
             <Route path="/admin/events/:id" element={<ProtectedRoute requiredRole="ADMIN"><AdminEventDashboard /></ProtectedRoute>} />
             <Route path="/admin/events/:id/roster" element={<ProtectedRoute requiredRole="ADMIN"><AdminRoster /></ProtectedRoute>} />

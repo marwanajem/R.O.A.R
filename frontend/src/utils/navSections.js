@@ -73,6 +73,7 @@ export function adminTopNavSections() {
       items: [
         { to: '/admin',                    label: 'Event List',        end: true },
         { to: '/admin/weight-templates',   label: 'Weight Templates'             },
+        { to: '/admin/pattern-templates',   label: 'Pattern Templates'           },
       ],
     },
   ]
@@ -86,6 +87,8 @@ export function adminNavSections(eventId) {
       items: [
         { to: '/admin',                    label: 'Event List',        end: true },
         { to: '/admin/weight-templates',   label: 'Weight Templates'             },
+        { to: '/admin/pattern-templates',   label: 'Pattern Templates'             },
+        
       ],
     },
     {
