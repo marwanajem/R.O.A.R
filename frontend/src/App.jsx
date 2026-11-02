@@ -31,6 +31,7 @@ import AdminEventDashboard from './pages/admin/AdminEventDashboard'
 import AdminRoster from './pages/admin/AdminRoster'
 import CategoryOverride from './pages/admin/CategoryOverride'
 import WeightTemplates from './pages/admin/WeightTemplates'
+import EditEvent from './pages/admin/EditEvent' 
 
 //Shared pages
 import Profile from './pages/shared/Profile'
@@ -57,15 +58,14 @@ export default function App() {
             <Route path="/events/:id/competitors/:cid/edit" element={<ProtectedRoute requiredRole="TM"><EditCompetitor /></ProtectedRoute>} />
             <Route path="/events/:id/teams" element={<ProtectedRoute requiredRole="TM"><TeamList /></ProtectedRoute>} />
             <Route path="/events/:id/teams/new" element={<ProtectedRoute requiredRole="TM"><TeamBuilder /></ProtectedRoute>} />
+            <Route path="/events/:id/teams/:teamId/edit" element={<ProtectedRoute requiredRole="TM"><EditTeam /></ProtectedRoute>} />
             <Route path="/events/:id/fees" element={<ProtectedRoute requiredRole="TM"><FeesPayment /></ProtectedRoute>} />
             <Route path="/club/roster" element={<ProtectedRoute requiredRole="TM"><MasterAthleteList /></ProtectedRoute>} />
             <Route path="/club/payments" element={<ProtectedRoute requiredRole="TM"><OverallPayments /></ProtectedRoute>} />
-            <Route path="/events/:id/sparring" element={<CategorySparring />} />
-            <Route path="/events/:id/kyorugi" element={<CategorySparring />} /> 
-            <Route path="/events/:id/pattern" element={<CategoryPattern />} />
-            <Route path="/events/:id/poomsae" element={<CategoryPattern />} />
-            <Route path="/events/:id/teams/new" element={<TeamBuilder />} />
-            <Route path="/events/:id/teams/:teamId/edit" element={<EditTeam />} />
+            <Route path="/events/:id/sparring" element={<ProtectedRoute requiredRole="TM"><CategorySparring /></ProtectedRoute>} />
+            <Route path="/events/:id/kyorugi" element={<ProtectedRoute requiredRole="TM"><CategorySparring /></ProtectedRoute>} /> 
+            <Route path="/events/:id/pattern" element={<ProtectedRoute requiredRole="TM"><CategoryPattern /></ProtectedRoute>} />
+            <Route path="/events/:id/poomsae" element={<ProtectedRoute requiredRole="TM"><CategoryPattern /></ProtectedRoute>} />
 
             {/* Admin routes */}
             <Route path="/admin" element={<ProtectedRoute requiredRole="ADMIN"><AdminEventList /></ProtectedRoute>} />
@@ -75,6 +75,9 @@ export default function App() {
             <Route path="/admin/events/:id/roster" element={<ProtectedRoute requiredRole="ADMIN"><AdminRoster /></ProtectedRoute>} />
             <Route path="/admin/events/:id/categories" element={<ProtectedRoute requiredRole="ADMIN"><CategoryOverride /></ProtectedRoute>} />
             
+            {/* FIXED: Edit Event Route */}
+            <Route path="/admin/events/:id/edit" element={<ProtectedRoute requiredRole="ADMIN"><EditEvent /></ProtectedRoute>} />
+
             {/* Shared routes */}
             {/* Team Manager profile  */}
             <Route path="/profile" element={<ProtectedRoute allowedRoles={['team_manager']}><Profile /></ProtectedRoute>} />

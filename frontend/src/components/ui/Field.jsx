@@ -8,7 +8,7 @@ const Field = React.forwardRef(function Field(
   return (
     <div className={`field-group ${className}`.trim()}>
       {label && (
-        <label htmlFor={inputId} className="field-label">
+        <label htmlFor={inputId} className="field-label mb-2">
           {label}
           {required && <span className="field-required">*</span>}
         </label>

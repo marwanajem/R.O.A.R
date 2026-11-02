@@ -1,17 +1,16 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useForm } from 'react-hook-form'
+import { useForm, FormProvider, useFormContext } from 'react-hook-form'
 import TopBar from '../../components/ui/TopBar'
 import SideNav from '../../components/ui/SideNav'
 import PageHead from '../../components/ui/PageHead'
 import Field from '../../components/ui/Field'
-import SelectField from '../../components/ui/SelectField'
 import Btn from '../../components/ui/Btn'
 import Chip from '../../components/ui/Chip'
 import { adminTopNavSections } from '../../utils/navSections'
 
 const STEPS = [
-  { num: 1, label: 'Basics' },
+  { num: 1, label: 'Basics & Logistics' },
   { num: 2, label: 'Ruleset & Template' },
   { num: 3, label: 'Fees & Policy' },
   { num: 4, label: 'Review & Publish' },
@@ -19,7 +18,7 @@ const STEPS = [
 
 function StepBar({ current }) {
   return (
-    <div className="step-bar">
+    <div className="step-bar" style={{ marginBottom: '2rem' }}>
       {STEPS.map((step, i) => {
         const state = step.num < current ? 'done' : step.num === current ? 'active' : ''
         return (
@@ -38,13 +37,17 @@ function StepBar({ current }) {
   )
 }
 
-// Step 1 — Basics
-function StepBasics({ register, errors }) {
+// ==========================================
+// STEP 1 — BASICS & LOGISTICS
+// ==========================================
+function StepBasics() {
+  const { register, formState: { errors }, watch } = useFormContext()
+  const eventDate = watch('eventDate')
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
       <Field
         label="Event Name"
-        name="name"
         id="name"
         type="text"
         required
@@ -52,10 +55,10 @@ function StepBasics({ register, errors }) {
         error={errors.name?.message}
         {...register('name', { required: 'Event name is required.' })}
       />
+      
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
         <Field
           label="Event Date (Start)"
-          name="eventDate"
           id="eventDate"
           type="date"
           required
@@ -64,16 +67,15 @@ function StepBasics({ register, errors }) {
         />
         <Field
           label="Event Date (End)"
-          name="eventDateEnd"
           id="eventDateEnd"
           type="date"
           error={errors.eventDateEnd?.message}
           {...register('eventDateEnd')}
         />
       </div>
+
       <Field
         label="Venue"
-        name="venue"
         id="venue"
         type="text"
         required
@@ -81,10 +83,12 @@ function StepBasics({ register, errors }) {
         error={errors.venue?.message}
         {...register('venue', { required: 'Venue is required.' })}
       />
+
+      <hr className="divider" style={{ margin: '0.5rem 0' }} />
+
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
         <Field
           label="Registration Opens"
-          name="regStart"
           id="regStart"
           type="date"
           required
@@ -93,106 +97,100 @@ function StepBasics({ register, errors }) {
         />
         <Field
           label="Registration Closes"
-          name="regEnd"
           id="regEnd"
           type="date"
           required
           error={errors.regEnd?.message}
-          {...register('regEnd', { required: 'Registration close date is required.' })}
+          {...register('regEnd', { 
+            required: 'Registration close date is required.',
+            validate: (val) => !eventDate || new Date(val) <= new Date(eventDate) || 'Registration must close before the event starts.'
+          })}
+        />
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap:"1rem"}}>
+          <label className="field-label">Age Calculation Rule *</label>
+          <select className="field-input field-select" {...register('ageRule', { required: 'Age rule is required.' })}>
+            <option value="jan1">Age as of January 1st (Event Year)</option>
+            <option value="event_date">Age on exact Event Start Date</option>
+          </select>
+        </div>
+        <Field
+          label="Max Competitors (Capacity)"
+          id="maxCompetitors"
+          type="number"
+          placeholder="Leave blank for unlimited"
+          error={errors.maxCompetitors?.message}
+          {...register('maxCompetitors', { min: { value: 1, message: 'Must be at least 1' } })}
         />
       </div>
     </div>
   )
 }
 
-// Step 2 — Ruleset & Template (MAIN DEMO SCREEN)
-function StepRuleset({ register, errors, watch }) {
-  const ruleset = watch('ruleset') || 'ITF'
-  const ITF_CATEGORIES = ['Pattern', 'Sparring', 'Team Pattern', 'Team Sparring', 'Pair Pattern']
-  const WT_CATEGORIES = ['Kyorugi', 'Poomsae', 'Team Poomsae', 'Freestyle Poomsae']
+// ==========================================
+// STEP 2 — RULESET & TEMPLATE
+// ==========================================
+function StepRuleset() {
+  const { register, watch, setValue } = useFormContext()
+  const ruleset = watch('ruleset')
+  const selectedCats = watch('categories') || []
 
-  const [selectedCats, setSelectedCats] = useState(
-    ruleset === 'ITF' ? [...ITF_CATEGORIES] : [...WT_CATEGORIES]
-  )
-
+  const ITF_CATEGORIES = ['Pattern', 'Sparring', 'Team Pattern', 'Team Sparring', 'Special Technique']
+  const WT_CATEGORIES = ['Kyorugi', 'Poomsae', 'Team Poomsae', 'Freestyle Poomsae', 'Kyokpa (Breaking)']
   const allCats = ruleset === 'ITF' ? ITF_CATEGORIES : WT_CATEGORIES
 
+  // Auto-switch categories when ruleset changes
+  useEffect(() => {
+    setValue('categories', ruleset === 'ITF' ? ['Pattern', 'Sparring'] : ['Kyorugi', 'Poomsae'])
+  }, [ruleset, setValue])
+
   function toggleCat(cat) {
-    setSelectedCats((prev) =>
-      prev.includes(cat) ? prev.filter((c) => c !== cat) : [...prev, cat]
-    )
+    if (selectedCats.includes(cat)) {
+      setValue('categories', selectedCats.filter((c) => c !== cat), { shouldValidate: true })
+    } else {
+      setValue('categories', [...selectedCats, cat], { shouldValidate: true })
+    }
   }
-
-  const ITF_AGE_GROUPS = ['U8', '9-11', '12-14', '15-17', '18+']
-  const WT_AGE_GROUPS = ['Cadet (14-17)', 'Junior (15-17)', 'Senior (18+)', 'Veteran (45+)']
-  const ageGroups = ruleset === 'ITF' ? ITF_AGE_GROUPS : WT_AGE_GROUPS
-
-  const ITF_BELT_GROUPS = [
-    { code: 'CB', label: 'Colour Belt (8G–5G)' },
-    { code: 'CB-low', label: 'Colour Belt Low (4G–1G)' },
-    { code: 'BB', label: 'Black Belt (1D–3D)' },
-    { code: 'BB-senior', label: 'Black Belt Senior (4D–6D)' },
-  ]
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+      
       {/* Ruleset selector */}
       <div className="box">
-        <div className="section-label" style={{ marginBottom: '0.875rem' }}>
-          Championship Ruleset
-        </div>
+        <div className="section-label" style={{ marginBottom: '0.875rem' }}>Championship Ruleset</div>
         <div style={{ display: 'flex', gap: '0.75rem' }}>
           {['ITF', 'WT'].map((rs) => (
-            <label
-              key={rs}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.625rem',
-                padding: '0.75rem 1.25rem',
-                border: `1px solid ${watch('ruleset') === rs || (!watch('ruleset') && rs === 'ITF') ? 'var(--gold-soft)' : 'var(--line)'}`,
-                borderRadius: '4px',
-                background: watch('ruleset') === rs || (!watch('ruleset') && rs === 'ITF') ? 'var(--gold-deep)' : 'var(--paper-3)',
-                cursor: 'pointer',
-                transition: 'all 0.15s',
-              }}
-            >
-              <input
-                type="radio"
-                value={rs}
-                defaultChecked={rs === 'ITF'}
-                style={{ accentColor: 'var(--gold)' }}
-                {...register('ruleset', { required: true })}
-              />
+            <label key={rs} style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', padding: '0.75rem 1.25rem', border: `1px solid ${ruleset === rs ? 'var(--gold-soft)' : 'var(--line)'}`, borderRadius: '4px', background: ruleset === rs ? 'var(--gold-deep)' : 'var(--paper-3)', cursor: 'pointer', transition: 'all 0.15s' }}>
+              <input type="radio" value={rs} style={{ accentColor: 'var(--gold)' }} {...register('ruleset')} />
               <div>
-                <div style={{ fontFamily: 'Saira Condensed, sans-serif', fontSize: '1.125rem', fontWeight: 700, color: 'var(--ink)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                  {rs}
-                </div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>
-                  {rs === 'ITF' ? 'International Taekwon-Do Federation' : 'World Taekwondo'}
-                </div>
+                <div style={{ fontFamily: 'Saira Condensed, sans-serif', fontSize: '1.125rem', fontWeight: 700, color: 'var(--ink)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{rs}</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>{rs === 'ITF' ? 'International Taekwon-Do Federation' : 'World Taekwondo'}</div>
               </div>
             </label>
           ))}
         </div>
       </div>
 
+      {/* Belt Groupings */}
+      <div className="box">
+        <div className="section-label" style={{ marginBottom: '0.875rem' }}>Belt Divisions</div>
+        <select className="field-input field-select" {...register('beltGrouping')}>
+          <option value="all">Open to All Belts (Colour & Black Belts)</option>
+          <option value="black_belt_only">Invitational: Black Belts Only</option>
+          <option value="colour_belt_only">Development: Colour Belts Only</option>
+        </select>
+      </div>
+
       {/* Categories */}
       <div className="box">
-        <div className="section-label" style={{ marginBottom: '0.875rem' }}>
-          Event Categories
-        </div>
+        <div className="section-label" style={{ marginBottom: '0.875rem' }}>Event Categories / Disciplines</div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
           {allCats.map((cat) => {
             const active = selectedCats.includes(cat)
             return (
-              <button
-                key={cat}
-                type="button"
-                onClick={() => toggleCat(cat)}
-                className={`chip ${active ? 'chip-gold' : 'chip-ghost'}`}
-                style={{ cursor: 'pointer', padding: '0.375rem 0.75rem', border: active ? undefined : '1px dashed var(--muted-2)' }}
-              >
+              <button key={cat} type="button" onClick={() => toggleCat(cat)} className={`chip ${active ? 'chip-gold' : 'chip-ghost'}`} style={{ cursor: 'pointer', padding: '0.375rem 0.75rem', border: active ? undefined : '1px dashed var(--muted-2)' }}>
                 {active ? '✓ ' : '+ '}{cat}
               </button>
             )
@@ -200,152 +198,118 @@ function StepRuleset({ register, errors, watch }) {
         </div>
       </div>
 
-      {/* Age groups */}
-      <div className="box">
-        <div className="section-label" style={{ marginBottom: '0.875rem' }}>
-          Age Groups
-        </div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-          {ageGroups.map((ag) => (
-            <Chip key={ag} variant="default">{ag}</Chip>
-          ))}
-        </div>
-        <p style={{ fontSize: '0.75rem', color: 'var(--muted)', marginTop: '0.625rem' }}>
-          Age groups are determined by the {ruleset} ruleset template and event year. Individual overrides available in Categories tab.
-        </p>
-      </div>
-
-      {/* Belt groups */}
-      {ruleset === 'ITF' && (
-        <div className="box">
-          <div className="section-label" style={{ marginBottom: '0.875rem' }}>
-            Belt Groups (ITF)
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '0.5rem' }}>
-            {ITF_BELT_GROUPS.map((bg) => (
-              <div key={bg.code} className="box-slot" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <Chip variant="gold">{bg.code}</Chip>
-                <span style={{ fontSize: '0.75rem', color: 'var(--ink-2)' }}>{bg.label}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Template note */}
       <div style={{ background: 'var(--paper-3)', border: '1px solid var(--gold-deep)', borderRadius: '4px', padding: '0.875rem 1rem', display: 'flex', gap: '0.625rem' }}>
         <span style={{ color: 'var(--gold)', fontSize: '0.875rem', flexShrink: 0 }}>ℹ</span>
         <p style={{ fontSize: '0.8125rem', color: 'var(--ink-2)', margin: 0 }}>
-          Using <strong style={{ color: 'var(--gold)' }}>{ruleset} Standard Template</strong>. Weight classes and sparring divisions will be pre-populated from the ruleset defaults. You can override individual categories in Step 3 or after publishing via the Categories tab.
+          Using <strong style={{ color: 'var(--gold)' }}>{ruleset} Standard Template</strong>. Weight classes and age divisions will be pre-populated. You can override them in the Category Overrides tab after publishing.
         </p>
       </div>
     </div>
   )
 }
 
-// Step 3 — Fees & Policy
-function StepFees({ register, errors }) {
+// ==========================================
+// STEP 3 — FEES & POLICY
+// ==========================================
+function StepFees() {
+  const { register, formState: { errors } } = useFormContext()
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
-        <Field
-          label="Individual Fee (MYR)"
-          name="feeIndividual"
-          id="feeIndividual"
-          type="number"
-          inputMode="numeric"
-          required
-          placeholder="60"
-          error={errors.feeIndividual?.message}
-          {...register('feeIndividual', { required: 'Fee required.', min: { value: 0, message: 'Cannot be negative.' } })}
-        />
-        <Field
-          label="Team Fee (MYR)"
-          name="feeTeam"
-          id="feeTeam"
-          type="number"
-          inputMode="numeric"
-          required
-          placeholder="120"
-          error={errors.feeTeam?.message}
-          {...register('feeTeam', { required: 'Fee required.', min: { value: 0, message: 'Cannot be negative.' } })}
-        />
-        <Field
-          label="Pair Fee (MYR)"
-          name="feePair"
-          id="feePair"
-          type="number"
-          inputMode="numeric"
-          required
-          placeholder="80"
-          error={errors.feePair?.message}
-          {...register('feePair', { required: 'Fee required.', min: { value: 0, message: 'Cannot be negative.' } })}
-        />
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+      
+      <div className="box">
+        <div className="section-label" style={{ marginBottom: '1rem' }}>Standard Registration Fees</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+          <Field 
+            label="Individual Fee (MYR)" 
+            id="feeIndividual" 
+            type="number" 
+            required 
+            placeholder="60" 
+            error={errors.feeIndividual?.message} 
+            {...register('feeIndividual', { required: 'Fee required.', min: 0 })} 
+          />
+          <Field 
+            label="Team/Pair Fee (MYR)" 
+            id="feeTeam" 
+            type="number" 
+            required 
+            placeholder="120" 
+            error={errors.feeTeam?.message} 
+            {...register('feeTeam', { required: 'Fee required.', min: 0 })} 
+          />
+        </div>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-        <Field
-          label="Bank Name"
-          name="bankName"
-          id="bankName"
-          type="text"
-          required
-          placeholder="e.g. Maybank"
-          error={errors.bankName?.message}
-          {...register('bankName', { required: 'Bank name required.' })}
-        />
-        <Field
-          label="Account Number"
-          name="bankAccount"
-          id="bankAccount"
-          type="text"
-          autoComplete="off"
-          required
-          placeholder="xxxx xxxx xxxx"
-          error={errors.bankAccount?.message}
-          {...register('bankAccount', { required: 'Account number required.' })}
-        />
+
+      <div className="box">
+        <div className="section-label" style={{ marginBottom: '1rem' }}>Payment Gateway Details</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+          <Field 
+            label="Bank Name" 
+            id="bankName" 
+            type="text" 
+            required 
+            placeholder="e.g. Maybank" 
+            error={errors.bankName?.message} 
+            {...register('bankName', { required: 'Bank name required.' })} 
+          />
+          <Field 
+            label="Account Number" 
+            id="bankAccount" 
+            type="text" 
+            autoComplete="off" 
+            required 
+            placeholder="xxxx xxxx xxxx" 
+            error={errors.bankAccount?.message} 
+            {...register('bankAccount', { required: 'Account number required.' })} 
+          />
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginTop: '1rem' }}>
+          <Field 
+            label="Account Name" 
+            id="bankAccountName" 
+            type="text" 
+            required 
+            placeholder="e.g. PERSATUAN TAEKWONDO ROAR" 
+            error={errors.bankAccountName?.message} 
+            {...register('bankAccountName', { required: 'Account name required.' })} 
+          />
+          <Field 
+            label="Payment Reference Format" 
+            id="paymentRef" 
+            type="text" 
+            placeholder="e.g. ROAR2027-{clubCode}" 
+            hint="Use {clubCode} as a placeholder" 
+            {...register('paymentRef')} 
+          />
+        </div>
       </div>
-      <Field
-        label="Account Name"
-        name="bankAccountName"
-        id="bankAccountName"
-        type="text"
-        required
-        placeholder="e.g. PERSATUAN TAEKWONDO ROAR"
-        error={errors.bankAccountName?.message}
-        {...register('bankAccountName', { required: 'Account name required.' })}
-      />
-      <Field
-        label="Payment Reference Format"
-        name="paymentRef"
-        id="paymentRef"
-        type="text"
-        placeholder="e.g. ROAR2027-{clubCode}"
-        hint="Use {clubCode} as a placeholder — it will be replaced with each club's code"
-        {...register('paymentRef')}
-      />
+
     </div>
   )
 }
 
-// Step 4 — Review
-function StepReview({ getValues }) {
+// ==========================================
+// STEP 4 — REVIEW & PUBLISH
+// ==========================================
+function StepReview() {
+  const { getValues } = useFormContext()
   const values = getValues()
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
       <div className="box">
-        <div className="section-label" style={{ marginBottom: '0.875rem' }}>
-          Summary
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+        <div className="section-label" style={{ marginBottom: '0.875rem' }}>Final Overview</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
           {[
             ['Event Name', values.name || '—'],
-            ['Ruleset', values.ruleset || 'ITF'],
+            ['Ruleset', values.ruleset],
             ['Venue', values.venue || '—'],
-            ['Event Date', values.eventDate || '—'],
+            ['Event Date', `${values.eventDate || '—'} to ${values.eventDateEnd || '—'}`],
             ['Reg. Window', `${values.regStart || '—'} → ${values.regEnd || '—'}`],
-            ['Individual Fee', values.feeIndividual ? `MYR ${values.feeIndividual}` : '—'],
-            ['Team Fee', values.feeTeam ? `MYR ${values.feeTeam}` : '—'],
+            ['Categories', (values.categories || []).join(', ') || '—'],
+            ['Belt Rule', values.beltGrouping?.replace(/_/g, ' ').toUpperCase() || '—'],
+            ['Standard Fees', `Indiv: MYR ${values.feeIndividual || '0'} | Team: MYR ${values.feeTeam || '0'}`],
           ].map(([label, val]) => (
             <div key={label}>
               <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '0.6rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--muted-2)', marginBottom: '3px' }}>{label}</div>
@@ -354,30 +318,38 @@ function StepReview({ getValues }) {
           ))}
         </div>
       </div>
-      <div style={{ background: 'var(--paper-3)', border: '1px solid var(--ok)', borderRadius: '4px', padding: '0.875rem 1rem', display: 'flex', gap: '0.625rem' }}>
-        <span style={{ color: 'var(--ok)', fontSize: '0.875rem', flexShrink: 0 }}>✓</span>
+
+      <div style={{ background: 'var(--paper-3)', border: '1px solid var(--gold)', borderRadius: '4px', padding: '0.875rem 1rem', display: 'flex', gap: '0.625rem' }}>
+        <span style={{ color: 'var(--gold)', fontSize: '0.875rem', flexShrink: 0 }}>ℹ</span>
         <p style={{ fontSize: '0.8125rem', color: 'var(--ink-2)', margin: 0 }}>
-          Ready to publish. Event will appear as <strong style={{ color: 'var(--gold)' }}>Upcoming</strong> until the registration window opens.
+          <strong>Drafts</strong> remain hidden from Team Managers. <strong>Publishing</strong> will make this event visible immediately as 'Upcoming' until the registration date opens.
         </p>
       </div>
     </div>
   )
 }
 
+// ==========================================
+// MAIN WIZARD CONTAINER
+// ==========================================
 export default function CreateEvent() {
   const navigate = useNavigate()
   const [step, setStep] = useState(1)
 
-  const {
-    register,
-    handleSubmit,
-    watch,
-    getValues,
-    trigger,
-    formState: { errors, isSubmitting },
-  } = useForm({ defaultValues: { ruleset: 'ITF' } })
+  // Initialize react-hook-form
+  const methods = useForm({
+    defaultValues: { 
+      ruleset: 'ITF', 
+      categories: ['Pattern', 'Sparring'],
+      beltGrouping: 'all',
+      ageRule: 'jan1'
+    }
+  })
+
+  const { handleSubmit, trigger, formState: { isSubmitting } } = methods
 
   async function goNext() {
+    // Validate only the current step's fields before allowing progress
     const valid = await trigger()
     if (valid) setStep((s) => Math.min(s + 1, 4))
   }
@@ -386,78 +358,80 @@ export default function CreateEvent() {
     setStep((s) => Math.max(s - 1, 1))
   }
 
-  const onSubmit = async (data) => {
+  const submitEvent = async (data, status) => {
     try {
-      // Send the wizard data to backend route
+      // Append the explicitly chosen status (DRAFT or PUBLISHED)
+      const payload = { ...data, status }
+      
       const response = await fetch('/api/events', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
+        body: JSON.stringify(payload),
       });
 
       if (response.ok) {
-        console.info('Event created successfully in MySQL!');
-        
-        navigate('/admin');
+        navigate('/admin')
       } else {
-        console.error('Failed to create event on the server.');
+        console.error('Failed to create event.')
       }
     } catch (error) {
-      console.error('Network error creating event:', error);
+      console.error('Network error:', error)
     }
   }
+
   return (
     <div className="wf">
-      <TopBar
-        breadcrumbs={[
-          { label: 'Admin', to: '/admin' },
-          { label: 'Events', to: '/admin' },
-          { label: 'Create Event' },
-        ]}
-      />
+      <TopBar breadcrumbs={[{ label: 'Admin', to: '/admin' }, { label: 'Events', to: '/admin' }, { label: 'Create Event' }]} />
+      
       <div className="wf-body">
         <SideNav sections={adminTopNavSections()} />
-        <div className="wf-main" style={{ maxWidth: '760px' }}>
-        <PageHead title="Create Event" sub="4-step wizard — set up a new championship" />
+        <div className="wf-main" style={{ maxWidth: '800px' }}>
+          <PageHead title="Create Event" sub="4-step wizard — set up a new championship" />
 
-        <StepBar current={step} />
+          <StepBar current={step} />
 
-        <form onSubmit={handleSubmit(onSubmit)} noValidate>
-          <div className="box" style={{ marginBottom: '1rem' }}>
-            <div className="section-label" style={{ marginBottom: '1.25rem' }}>
-              Step {step} — {STEPS[step - 1].label}
-            </div>
+          {/* Wrap the form in FormProvider to supply context to all nested steps */}
+          <FormProvider {...methods}>
+            <form noValidate>
+              <div className="box" style={{ marginBottom: '1.5rem', padding: '2rem' }}>
+                <div className="section-label" style={{ marginBottom: '1.5rem', color: 'var(--gold)', fontSize: '1rem' }}>
+                  Step {step} — {STEPS[step - 1].label}
+                </div>
 
-            {step === 1 && <StepBasics register={register} errors={errors} />}
-            {step === 2 && <StepRuleset register={register} errors={errors} watch={watch} />}
-            {step === 3 && <StepFees register={register} errors={errors} />}
-            {step === 4 && <StepReview getValues={getValues} />}
-          </div>
+                {step === 1 && <StepBasics />}
+                {step === 2 && <StepRuleset />}
+                {step === 3 && <StepFees />}
+                {step === 4 && <StepReview />}
+              </div>
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem' }}>
-            <div>
-              {step > 1 && (
-                <Btn variant="ghost" type="button" onClick={goPrev}>
-                  ← Back
-                </Btn>
-              )}
-            </div>
-            <div style={{ display: 'flex', gap: '0.75rem' }}>
-              <Btn variant="ghost" type="button" onClick={() => navigate('/admin')}>
-                Cancel
-              </Btn>
-              {step < 4 ? (
-                <Btn variant="primary" type="button" onClick={goNext}>
-                  Next: {STEPS[step].label} →
-                </Btn>
-              ) : (
-                <Btn variant="primary" type="submit" disabled={isSubmitting}>
-                  {isSubmitting ? 'Publishing…' : 'Publish Event'}
-                </Btn>
-              )}
-            </div>
-          </div>
-        </form>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  {step > 1 ? (
+                    <Btn variant="ghost" type="button" onClick={goPrev}>← Back</Btn>
+                  ) : (
+                    <Btn variant="ghost" type="button" onClick={() => navigate('/admin')}>Cancel</Btn>
+                  )}
+                </div>
+                
+                <div style={{ display: 'flex', gap: '0.75rem' }}>
+                  {step < 4 ? (
+                    <Btn variant="primary" type="button" onClick={goNext}>
+                      Next: {STEPS[step].label} →
+                    </Btn>
+                  ) : (
+                    <>
+                      <Btn variant="ghost" type="button" onClick={handleSubmit((data) => submitEvent(data, 'DRAFT'))} disabled={isSubmitting}>
+                        Save as Draft
+                      </Btn>
+                      <Btn variant="primary" type="button" onClick={handleSubmit((data) => submitEvent(data, 'PUBLISHED'))} disabled={isSubmitting}>
+                        {isSubmitting ? 'Publishing…' : 'Publish Event'}
+                      </Btn>
+                    </>
+                  )}
+                </div>
+              </div>
+            </form>
+          </FormProvider>
         </div>
       </div>
     </div>

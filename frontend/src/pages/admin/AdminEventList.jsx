@@ -30,22 +30,20 @@ export default function AdminEventList() {
   const [events, setEvents] = useState([])
   const [loading, setLoading] = useState(true)
 
-
   const [search, setSearch] = useState('')
-  const [filterRuleset, setFilterRuleset] = useState('')
+  const [filterRuleset, setFilterRuleset] = useState('ALL') // Default to ALL
   const [filterStatus, setFilterStatus] = useState('')
 
   useEffect(() => {
     const fetchEvents = async () => {
       try {
-        const response = await fetch('/api/events');
+        const response = await fetch('/api/events?all=true');
         if (response.ok) {
           const data = await response.json();
           
           const safeEvents = data.map(ev => {
             const eventYear = ev.eventDate ? new Date(ev.eventDate).getFullYear() : new Date().getFullYear();
             
-
             let computedStatus = ev.status ? ev.status.toLowerCase() : 'upcoming';
             const now = new Date();
             const regCloseDate = new Date(ev.regCloseDate);
@@ -90,14 +88,16 @@ export default function AdminEventList() {
     fetchEvents();
   }, []);
 
-  // Filter Logic
-  const filteredEvents = events.filter((ev) => {
+  // 1. Filter by Ruleset first so the Status Chips can show accurate counts
+  const rulesetEvents = events.filter(ev => filterRuleset === 'ALL' || ev.ruleset === filterRuleset);
+
+  // 2. Filter the remainder by Search and Status
+  const filteredEvents = rulesetEvents.filter((ev) => {
     const q = search.toLowerCase();
     const matchSearch = !q || ev.name.toLowerCase().includes(q) || ev.uiId.toLowerCase().includes(q);
-    const matchRuleset = !filterRuleset || ev.ruleset === filterRuleset;
     const matchStatus = !filterStatus || ev.status === filterStatus;
     
-    return matchSearch && matchRuleset && matchStatus;
+    return matchSearch && matchStatus;
   });
 
   return (
@@ -116,35 +116,74 @@ export default function AdminEventList() {
             }
           />
 
+          {/* Color-Coded ITF / WT Tabs Filter */}
+          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--line)', paddingBottom: '1.25rem' }}>
+            {['ALL', 'ITF', 'WT'].map(tab => {
+              const isActive = filterRuleset === tab;
+              
+              let bg = isActive ? 'rgba(212, 175, 55, 0.1)' : 'transparent';
+              let color = isActive ? 'var(--gold)' : 'var(--muted)';
+              let border = isActive ? 'rgba(212, 175, 55, 0.3)' : 'transparent';
+
+              if (tab === 'WT' && isActive) {
+                bg = 'rgba(59, 130, 246, 0.1)';      
+                color = '#60A5FA';                   
+                border = 'rgba(59, 130, 246, 0.3)';  
+              }
+
+              return (
+                <button
+                  key={tab}
+                  onClick={() => setFilterRuleset(tab)}
+                  style={{
+                    background: bg,
+                    color: color,
+                    border: `1px solid ${border}`,
+                    padding: '0.4rem 1.25rem',
+                    borderRadius: '4px',
+                    fontSize: '0.8125rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    fontFamily: 'JetBrains Mono, monospace',
+                    transition: 'all 0.2s ease'
+                  }}
+                >
+                  {tab === 'ALL' ? 'ALL EVENTS' : tab}
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Status Chips (Counts dynamically update based on Ruleset Tab) */}
           <div style={{ display: 'flex', gap: '0.625rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
             <div onClick={() => setFilterStatus('open')} style={{ cursor: 'pointer' }}>
               <Chip variant={filterStatus === 'open' ? 'ok' : 'ghost'}>
-                {events.filter((e) => e.status === 'open').length} Open
+                {rulesetEvents.filter((e) => e.status === 'open').length} Open
               </Chip>
             </div>
             <div onClick={() => setFilterStatus('upcoming')} style={{ cursor: 'pointer' }}>
               <Chip variant={filterStatus === 'upcoming' ? 'gold' : 'ghost'}>
-                {events.filter((e) => e.status === 'upcoming').length} Upcoming
+                {rulesetEvents.filter((e) => e.status === 'upcoming').length} Upcoming
               </Chip>
             </div>
             <div onClick={() => setFilterStatus('closed')} style={{ cursor: 'pointer' }}>
               <Chip variant={filterStatus === 'closed' ? 'stamp' : 'ghost'}>
-                {events.filter((e) => e.status === 'closed').length} Closed
+                {rulesetEvents.filter((e) => e.status === 'closed').length} Closed
               </Chip>
             </div>
             <div onClick={() => setFilterStatus('archived')} style={{ cursor: 'pointer' }}>
               <Chip variant={filterStatus === 'archived' ? 'default' : 'ghost'}>
-                {events.filter((e) => e.status === 'archived').length} Archived
+                {rulesetEvents.filter((e) => e.status === 'archived').length} Archived
               </Chip>
             </div>
             <div onClick={() => setFilterStatus('')} style={{ cursor: 'pointer' }}>
               <Chip variant={filterStatus === '' ? 'default' : 'ghost'}>
-                {events.length} Total
+                {rulesetEvents.length} Total
               </Chip>
             </div>
           </div>
 
-          {/* Filter Bar */}
+          {/* Search & Select Filter Bar */}
           <div className="box" style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '1rem', padding: '0.75rem 1rem' }}>
             <input 
               className="field-input" 
@@ -153,11 +192,6 @@ export default function AdminEventList() {
               onChange={(e) => setSearch(e.target.value)} 
               style={{ flex: '1 1 200px', minWidth: '180px' }} 
             />
-            <select className="field-input field-select" value={filterRuleset} onChange={(e) => setFilterRuleset(e.target.value)} style={{ width: '150px' }}>
-              <option value="">All Rulesets</option>
-              <option value="WT">WT (World Taekwondo)</option>
-              <option value="ITF">ITF (Int. Taekwon-Do Fed)</option>
-            </select>
             <select className="field-input field-select" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} style={{ width: '150px' }}>
               <option value="">All Statuses</option>
               <option value="open">Open</option>
@@ -220,6 +254,9 @@ export default function AdminEventList() {
                           </Btn>
                           <Btn variant="ghost" size="sm" to={`/admin/events/${ev.rawId}/categories`}>
                             Cats
+                          </Btn>
+                          <Btn variant="ghost" size="sm" to={`/admin/events/${ev.rawId}/edit`}>
+                            Edit
                           </Btn>
                         </div>
                       </td>
