@@ -19,8 +19,10 @@ function TemplateEditor({ ruleset, fallbackClasses }) {
   const [filterGender, setFilterGender] = useState('')
   const [saved, setSaved] = useState(false)
   const [nextId, setNextId] = useState(1)
+  
+  const [editingId, setEditingId] = useState(null)
 
-  // Fetch from DB on load
+  
   useEffect(() => {
     async function fetchTemplates() {
       try {
@@ -28,11 +30,9 @@ function TemplateEditor({ ruleset, fallbackClasses }) {
         if (res.ok) {
           const data = await res.json()
           if (data.length > 0) {
-            // DB has data, use it
             setClasses(data.map(d => ({...d, min: Number(d.min), max: Number(d.max)})))
             setNextId(data.length + 1)
           } else {
-            // DB is empty, use the hardcoded fallbacks
             setClasses(fallbackClasses)
             setNextId(fallbackClasses.length + 1)
           }
@@ -63,15 +63,25 @@ function TemplateEditor({ ruleset, fallbackClasses }) {
   function addClass() {
     const id = `${ruleset.toLowerCase()}-new-${nextId}`
     setNextId((n) => n + 1)
-    setClasses((prev) => [...prev, blankClass(ruleset, id)])
+    
+    const newRow = blankClass(ruleset, id)
+    
+
+    if (filterAge) newRow.ageGroup = filterAge
+    if (filterGender) newRow.gender = filterGender
+    
+    setClasses((prev) => [newRow, ...prev])
+    setEditingId(id) 
   }
 
   function removeClass(id) {
     setClasses((prev) => prev.filter((wc) => wc.id !== id))
+    if (editingId === id) setEditingId(null)
   }
 
-  // Save to database
+
   async function handleSave() {
+    setEditingId(null) 
     try {
       const response = await fetch(`/api/weight-templates/${ruleset}`, {
         method: 'PATCH',
@@ -91,34 +101,25 @@ function TemplateEditor({ ruleset, fallbackClasses }) {
     return <div style={{ padding: '2rem', color: 'var(--muted)' }}>Loading templates...</div>
   }
 
+  
+  const accentColor = ruleset === 'WT' ? '#3b82f6' : 'var(--gold, #d4af37)'
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-      {/* Filter + actions bar */}
+      
       <div className="box" style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', padding: '0.75rem 1rem', alignItems: 'center' }}>
-        <select
-          className="field-input field-select"
-          value={filterAge}
-          onChange={(e) => setFilterAge(e.target.value)}
-          style={{ width: '150px' }}
-          aria-label="Filter by age group"
-        >
+        <select className="field-input field-select" value={filterAge} onChange={(e) => setFilterAge(e.target.value)} style={{ width: '150px' }}>
           <option value="">All Age Groups</option>
           {ageGroups.map((ag) => (
             <option key={ag} value={ag}>{ag}</option>
           ))}
         </select>
-        <select
-          className="field-input field-select"
-          value={filterGender}
-          onChange={(e) => setFilterGender(e.target.value)}
-          style={{ width: '130px' }}
-          aria-label="Filter by gender"
-        >
+        <select className="field-input field-select" value={filterGender} onChange={(e) => setFilterGender(e.target.value)} style={{ width: '130px' }}>
           <option value="">All Genders</option>
           <option value="M">Male</option>
           <option value="F">Female</option>
         </select>
-        <span style={{ marginLeft: 'auto', fontSize: '0.75rem', color: 'var(--muted)', fontFamily: 'JetBrains Mono, monospace', alignSelf: 'center' }}>
+        <span style={{ marginLeft: 'auto', fontSize: '0.75rem', color: 'var(--muted)', fontFamily: 'JetBrains Mono, monospace' }}>
           {filtered.length} classes shown
         </span>
         {saved && <Stamp variant="ok">Saved</Stamp>}
@@ -135,73 +136,94 @@ function TemplateEditor({ ruleset, fallbackClasses }) {
               <th>Label</th>
               <th>Min (kg)</th>
               <th>Max (kg)</th>
-              <th></th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {filtered.map((wc) => (
-              <tr key={wc.id}>
-                <td>
-                  <input
-                    type="text"
-                    className="field-input"
-                    value={wc.ageGroup}
-                    onChange={(e) => updateClass(wc.id, 'ageGroup', e.target.value)}
-                    style={{ width: '80px', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.75rem', padding: '0.3rem 0.5rem' }}
-                    aria-label="Age group"
-                  />
-                </td>
-                <td>
-                  <select
-                    className="field-input field-select"
-                    value={wc.gender}
-                    onChange={(e) => updateClass(wc.id, 'gender', e.target.value)}
-                    style={{ width: '70px', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.75rem', padding: '0.3rem 0.5rem' }}
-                    aria-label="Gender"
-                  >
-                    <option value="M">M</option>
-                    <option value="F">F</option>
-                  </select>
-                </td>
-                <td>
-                  <input
-                    type="text"
-                    className="field-input"
-                    value={wc.label}
-                    onChange={(e) => updateClass(wc.id, 'label', e.target.value)}
-                    style={{ width: '180px', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.75rem', padding: '0.3rem 0.5rem' }}
-                    aria-label="Label"
-                  />
-                </td>
-                <td>
-                  <input
-                    type="number"
-                    className="field-input"
-                    value={wc.min === 0 ? '' : wc.min}
-                    onChange={(e) => updateClass(wc.id, 'min', e.target.value)}
-                    placeholder="0"
-                    style={{ width: '80px', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.75rem', padding: '0.3rem 0.5rem' }}
-                    aria-label="Min kg"
-                  />
-                </td>
-                <td>
-                  <input
-                    type="number"
-                    className="field-input"
-                    value={wc.max >= 999 ? '' : wc.max}
-                    onChange={(e) => updateClass(wc.id, 'max', e.target.value)}
-                    placeholder="open"
-                    style={{ width: '80px', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.75rem', padding: '0.3rem 0.5rem' }}
-                    aria-label="Max kg"
-                  />
-                </td>
-                <td>
-                  <Btn variant="stamp" size="sm" type="button" onClick={() => removeClass(wc.id)}>
-                    Remove
-                  </Btn>
-                </td>
-              </tr>
-            ))}
+            {filtered.map((wc) => {
+              const isEditing = editingId === wc.id;
+              
+              
+              const rowStyle = isEditing 
+                ? { backgroundColor: 'var(--paper-3)', boxShadow: `inset 3px 0 0 0 ${accentColor}` } 
+                : { opacity: 0.85 }
+
+              const inputStyle = {
+                fontFamily: 'JetBrains Mono, monospace', 
+                fontSize: '0.75rem', 
+                padding: '0.3rem 0.5rem',
+                backgroundColor: isEditing ? undefined : 'transparent',
+                borderColor: isEditing ? undefined : 'transparent',
+                color: isEditing ? 'var(--ink)' : 'var(--muted)'
+              }
+
+              return (
+                <tr key={wc.id} style={rowStyle}>
+                  <td>
+                    <input
+                      type="text"
+                      className="field-input"
+                      value={wc.ageGroup}
+                      disabled={!isEditing}
+                      onChange={(e) => updateClass(wc.id, 'ageGroup', e.target.value)}
+                      style={{ ...inputStyle, width: '90px' }}
+                    />
+                  </td>
+                  <td>
+                    <select
+                      className="field-input field-select"
+                      value={wc.gender}
+                      disabled={!isEditing}
+                      onChange={(e) => updateClass(wc.id, 'gender', e.target.value)}
+                      style={{ ...inputStyle, width: '60px', padding: isEditing ? '0.3rem 1.5rem 0.3rem 0.5rem' : '0.3rem' }}
+                    >
+                      <option value="M">M</option>
+                      <option value="F">F</option>
+                    </select>
+                  </td>
+                  <td>
+                    <input
+                      type="text"
+                      className="field-input"
+                      value={wc.label}
+                      disabled={!isEditing}
+                      onChange={(e) => updateClass(wc.id, 'label', e.target.value)}
+                      style={{ ...inputStyle, width: '180px' }}
+                    />
+                  </td>
+                  <td>
+                    <input
+                      type="number"
+                      className="field-input"
+                      value={wc.min === 0 ? '' : wc.min}
+                      disabled={!isEditing}
+                      onChange={(e) => updateClass(wc.id, 'min', e.target.value)}
+                      placeholder="0"
+                      style={{ ...inputStyle, width: '70px' }}
+                    />
+                  </td>
+                  <td>
+                    <input
+                      type="number"
+                      className="field-input"
+                      value={wc.max >= 999 ? '' : wc.max}
+                      disabled={!isEditing}
+                      onChange={(e) => updateClass(wc.id, 'max', e.target.value)}
+                      placeholder="open"
+                      style={{ ...inputStyle, width: '70px' }}
+                    />
+                  </td>
+                  <td style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                    {isEditing ? (
+                      <Btn variant="primary" size="sm" type="button" onClick={() => setEditingId(null)}>Done</Btn>
+                    ) : (
+                      <Btn variant="ghost" size="sm" type="button" onClick={() => setEditingId(wc.id)}>Edit</Btn>
+                    )}
+                    <Btn variant="stamp" size="sm" type="button" onClick={() => removeClass(wc.id)}>Remove</Btn>
+                  </td>
+                </tr>
+              )
+            })}
             {filtered.length === 0 && (
               <tr>
                 <td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: 'var(--muted)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.75rem' }}>
@@ -221,12 +243,7 @@ export default function WeightTemplates() {
 
   return (
     <div className="wf">
-      <TopBar
-        breadcrumbs={[
-          { label: 'Admin', to: '/admin' },
-          { label: 'Weight Templates' },
-        ]}
-      />
+      <TopBar breadcrumbs={[{ label: 'Admin', to: '/admin' }, { label: 'Weight Templates' }]} />
       <div className="wf-body">
         <SideNav sections={adminTopNavSections()} />
         <main className="wf-main">
@@ -236,36 +253,41 @@ export default function WeightTemplates() {
           />
 
           <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.25rem' }}>
-            {['ITF', 'WT'].map((rs) => (
-              <button
-                key={rs}
-                type="button"
-                onClick={() => setActiveTab(rs)}
-                className={`chip ${activeTab === rs ? 'chip-gold' : 'chip-ghost'}`}
-                style={{
-                  cursor: 'pointer',
-                  padding: '0.45rem 1.25rem',
-                  fontFamily: 'Saira Condensed, sans-serif',
-                  fontSize: '1rem',
-                  fontWeight: 700,
-                  letterSpacing: '0.06em',
-                  border: activeTab === rs ? undefined : '1px solid var(--line)',
-                }}
-              >
-                {rs}
-              </button>
-            ))}
+            {['ITF', 'WT'].map((rs) => {
+              const isActive = activeTab === rs;
+              const activeColor = rs === 'WT' ? '#3b82f6' : 'var(--gold, #d4af37)';
+              const activeBg = rs === 'WT' ? 'rgba(59, 130, 246, 0.15)' : 'var(--gold-deep, rgba(212, 175, 55, 0.15))';
+              
+              return (
+                <button
+                  key={rs}
+                  type="button"
+                  onClick={() => setActiveTab(rs)}
+                  style={{
+                    cursor: 'pointer',
+                    padding: '0.45rem 1.25rem',
+                    fontFamily: 'Saira Condensed, sans-serif',
+                    fontSize: '1rem',
+                    fontWeight: 700,
+                    letterSpacing: '0.06em',
+                    borderRadius: '4px',
+                    transition: 'all 0.15s',
+                    border: isActive ? `.5px solid ${activeColor}` : '.5px solid var(--line)',
+                    backgroundColor: isActive ? activeBg : 'transparent',
+                    color: isActive ? activeColor : 'var(--muted)'
+                  }}
+                >
+                  {rs}
+                </button>
+              )
+            })}
             <Chip variant="default" style={{ alignSelf: 'center', marginLeft: '0.5rem' }}>
               {activeTab === 'ITF' ? 'International Taekwon-Do Federation' : 'World Taekwondo'}
             </Chip>
           </div>
 
-          {activeTab === 'ITF' && (
-            <TemplateEditor key="ITF" ruleset="ITF" fallbackClasses={ITF_WEIGHT_CLASSES} />
-          )}
-          {activeTab === 'WT' && (
-            <TemplateEditor key="WT" ruleset="WT" fallbackClasses={WT_WEIGHT_CLASSES} />
-          )}
+          {activeTab === 'ITF' && <TemplateEditor key="ITF" ruleset="ITF" fallbackClasses={ITF_WEIGHT_CLASSES} />}
+          {activeTab === 'WT' && <TemplateEditor key="WT" ruleset="WT" fallbackClasses={WT_WEIGHT_CLASSES} />}
         </main>
       </div>
     </div>
