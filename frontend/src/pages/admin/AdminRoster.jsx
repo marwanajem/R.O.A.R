@@ -10,6 +10,12 @@ import Btn from '../../components/ui/Btn'
 import { adminNavSections } from '../../utils/navSections'
 import { exportCsv } from '../../utils/exportCsv'
 import { ITF_WEIGHT_CLASSES, WT_WEIGHT_CLASSES } from '../../data/weightTemplates'
+import pdfMake from 'pdfmake/build/pdfmake';
+import * as pdfFonts from 'pdfmake/build/vfs_fonts';
+
+
+// Safely initialize fonts by checking all possible Vite export styles and the global window object
+pdfMake.vfs = pdfFonts?.pdfMake?.vfs || pdfFonts?.default?.pdfMake?.vfs || window?.pdfMake?.vfs;
 
 // Added isSparring and isPattern 
 const EXPORT_COLUMNS = [
@@ -30,6 +36,24 @@ const EXPORT_COLUMNS = [
   { key: 'status',      header: 'Status' },
 ]
 
+
+// Helper to convert the logo image into the Base64 format required by PDFs
+const getBase64ImageFromURL = (url) => {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'Anonymous';
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      resolve(canvas.toDataURL('image/png'));
+    };
+    img.onerror = () => resolve(null); // Fallback if image path is wrong
+    img.src = url;
+  });
+};
 export default function AdminRoster() {
   const { id } = useParams()
   
@@ -167,7 +191,119 @@ export default function AdminRoster() {
     } finally {
       setIsSaving(false)
     }
+  } 
+
+  const handleDownloadBadges = () => {
+    try {
+      if (!sortedAndFiltered || sortedAndFiltered.length === 0) {
+        alert("No competitors found to generate badges.");
+        return;
+      }
+
+      const ev = Array.isArray(event) ? event[0] : (event || {});
+      const eventName = ev.shortName || ev.name || 'ROAR CHAMPIONSHIP';
+      
+      const dateVenueArr = [];
+      if (ev.eventDate || ev.date) dateVenueArr.push(ev.eventDate || ev.date);
+      if (ev.location || ev.venue) dateVenueArr.push(ev.location || ev.venue);
+      const eventFooterText = dateVenueArr.join(' — ');
+
+      const docDefinition = {
+        pageSize: 'A6',
+        pageMargins: [15, 20, 15, 15],
+        defaultStyle: { font: 'Roboto' },
+        content: sortedAndFiltered.map((comp, index) => {
+          
+          const eventRows = [
+            [
+              { text: 'Event', fontSize: 10, bold: true, fillColor: '#f2f2f2', margin: [4, 4, 4, 4] },
+              { text: 'Category', fontSize: 10, bold: true, fillColor: '#f2f2f2', margin: [4, 4, 4, 4] }
+            ]
+          ];
+
+          if (comp.isSparring) eventRows.push([{ text: 'Sparring', fontSize: 9, margin: [4, 4, 4, 4] }, { text: comp.weightClass || comp.weightCategory || `${comp.weightKg || '--'}kg`, fontSize: 9, margin: [4, 4, 4, 4] }]);
+          if (comp.isPattern) eventRows.push([{ text: 'Pattern', fontSize: 9, margin: [4, 4, 4, 4] }, { text: comp.patternFormat || 'Registered', fontSize: 9, margin: [4, 4, 4, 4] }]);
+          if (!comp.isSparring && !comp.isPattern) eventRows.push([{ text: 'None', fontSize: 9, color: '#999999', margin: [4, 4, 4, 4] }, { text: '--', fontSize: 9, color: '#999999', margin: [4, 4, 4, 4] }]);
+
+          let displayClub = comp.clubCode || 'Independent';
+          if (comp.clubName && comp.clubName !== comp.clubCode) {
+            displayClub = comp.clubName;
+          }
+
+          // Footer columns with the text brand removed
+          const footerColumns = [
+            {
+              text: [
+                { text: eventName.toUpperCase() + '\n', fontSize: 10, bold: true, color: '#13110E' },
+                { text: eventFooterText, fontSize: 6.5, color: '#666666' }
+              ],
+              width: '*',
+              alignment: 'left',
+              margin: [0, 4, 0, 0]
+            },
+            {
+              qr: `https://roarchampionship.com/competitor/${comp.id}`,
+              fit: 38,
+              alignment: 'right',
+              width: 35
+            }
+          ];
+
+          return [
+            {
+              text: [
+                { text: `${comp.id} — `, fontSize: 22, bold: true, color: '#13110E' },
+                { text: (comp.fullName || '').toUpperCase(), fontSize: 22, bold: true, color: '#13110E' }
+              ],
+              margin: [0, 0, 0, 12]
+            },
+            { 
+              text: [
+                { text: 'CLUB: ', fontSize: 10, color: '#666666' },
+                { text: displayClub, fontSize: 11, bold: true, color: '#13110E' }
+              ], 
+              margin: [0, 0, 0, 15] 
+            },
+            {
+              columns: [
+                { text: `Belt: ${comp.beltGroup || 'N/A'}`, fontSize: 10, width: '50%' },
+                { text: `Gender: ${comp.gender === 'M' ? 'Male' : comp.gender === 'F' ? 'Female' : 'N/A'}`, fontSize: 10, width: '50%' }
+              ],
+              margin: [0, 0, 0, 4]
+            },
+            { text: `Age Group: ${comp.ageCategory || 'N/A'}`, fontSize: 10, margin: [0, 0, 0, 20] },
+            {
+              table: {
+                headerRows: 1,
+                widths: ['35%', '65%'],
+                body: eventRows
+              },
+              layout: {
+                hLineWidth: (i, node) => (i === 0 || i === node.table.body.length) ? 1 : 0.5,
+                vLineWidth: () => 0.5,
+                hLineColor: () => '#cccccc',
+                vLineColor: () => '#cccccc',
+              },
+              margin: [0, 0, 0, 25] 
+            },
+            {
+              columns: footerColumns,
+              margin: [0, 0, 0, 0]
+            },
+            index < sortedAndFiltered.length - 1 ? { text: '', pageBreak: 'after' } : {}
+          ];
+        })
+      };
+
+      pdfMake.createPdf(docDefinition).open();
+
+    } catch (error) {
+      console.error("PDF Generation Error:", error);
+      alert(`Failed to generate PDF: ${error.message}`);
+    }
   }
+ 
+
 
   if (loading) return <div className="wf"><TopBar /><div className="wf-main" style={{ padding: '2rem', color: 'var(--muted)' }}>Loading roster...</div></div>
 
@@ -184,9 +320,14 @@ export default function AdminRoster() {
             title="Competitor Roster"
             sub={`${all.length} total entries · ${clubs.length} clubs`}
             right={
-              <Btn variant="gold-outline" onClick={() => exportCsv(`roar_roster_${event?.shortName || id}.csv`, EXPORT_COLUMNS, sortedAndFiltered)}>
-                Export Final CSV
-              </Btn>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <Btn variant="ghost" onClick={handleDownloadBadges}>
+                  🖨️ Export ID Badges
+                </Btn>
+                <Btn variant="gold-outline" onClick={() => exportCsv(`roar_roster_${event?.shortName || id}.csv`, EXPORT_COLUMNS, sortedAndFiltered)}>
+                  Export Final CSV
+                </Btn>
+              </div>
             }
           />
 

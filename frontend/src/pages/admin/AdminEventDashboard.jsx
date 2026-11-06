@@ -19,6 +19,7 @@ function StatCard({ label, value, sub, accent }) {
   )
 }
 
+
 export default function AdminEventDashboard() {
   const { id } = useParams() 
   const navigate = useNavigate() 

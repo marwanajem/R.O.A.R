@@ -225,12 +225,14 @@ router.get('/:id/competitors', async (req, res) => {
 
     const [competitors] = await pool.query(`
       SELECT 
-        id, fullName, clubCode, clubCode AS clubName, icMasked, 
-        DATE_FORMAT(dob, '%Y-%m-%d') AS dob, gender, beltGrade, ageCategory, 
-        beltGroup, weightKg, weightCategory AS weightClass, patternFormat, 
-        isSparring, isPattern, status 
-      FROM competitors 
-      WHERE eventId = ?
+        c.id, c.fullName, c.clubCode, u.clubName, c.icMasked, 
+        DATE_FORMAT(c.dob, '%Y-%m-%d') AS dob, c.gender, c.beltGrade, c.ageCategory, 
+        c.beltGroup, c.weightKg, c.weightCategory AS weightClass, c.patternFormat, 
+        c.isSparring, c.isPattern, c.status 
+      FROM competitors c
+      LEFT JOIN users u ON c.clubCode = u.clubCode
+      WHERE c.eventId = ?
+      GROUP BY c.id
     `, [eventId]);
 
     res.json(competitors);
