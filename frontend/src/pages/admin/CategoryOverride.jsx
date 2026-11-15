@@ -10,16 +10,24 @@ import Stamp from '../../components/ui/Stamp'
 import { adminNavSections } from '../../utils/navSections'
 import { ITF_WEIGHT_CLASSES, WT_WEIGHT_CLASSES } from '../../data/weightTemplates'
 
+// NEW: Import your pattern templates
+// Note: If you don't have this file yet, you will need to create it!
+// E.g. export const ITF_PATTERN_CLASSES = [{ id: 'itf-pat-m-1', label: 'Male Pattern', gender: 'M', type: 'pattern' }]
+import { ITF_PATTERN_CLASSES, WT_POOMSAE_CLASSES } from '../../data/patternTemplates'
+
 export default function CategoryOverride() {
   const { id } = useParams()
-  // Matches AdminRoster parsing logic
   const dbEventId = id ? parseInt(id.replace(/[^\d]/g, ''), 10) || id : null
   
   const [event, setEvent] = useState(null)
   const [loading, setLoading] = useState(true)
   const [classes, setClasses] = useState([])
+  
+  // NEW: Filter States
+  const [filterType, setFilterType] = useState('sparring') // 'sparring' or 'pattern'
   const [filterAge, setFilterAge] = useState('')
   const [filterGender, setFilterGender] = useState('')
+  
   const [saved, setSaved] = useState(false)
 
   useEffect(() => {
@@ -34,13 +42,23 @@ export default function CategoryOverride() {
           const eventData = await eventRes.json();
           setEvent(eventData);
           
-          const templateClasses = eventData.type === 'WT' ? WT_WEIGHT_CLASSES : ITF_WEIGHT_CLASSES;
+          // 1. Get ALL Base Templates for this Ruleset (Both Sparring and Pattern)
+          const weightTemplates = eventData.type === 'WT' ? WT_WEIGHT_CLASSES : ITF_WEIGHT_CLASSES;
+          // Ensure they are strictly marked as 'sparring'
+          const baseWeights = weightTemplates.map(w => ({ ...w, type: 'sparring' }));
+          
+          const patternTemplates = eventData.type === 'WT' ? WT_POOMSAE_CLASSES : ITF_PATTERN_CLASSES;
+          // Ensure they are strictly marked as 'pattern'
+          const basePatterns = patternTemplates.map(p => ({ ...p, type: 'pattern', min: 0, max: 999 })); 
+          
+          const allTemplates = [...baseWeights, ...basePatterns];
           
           if (catRes.ok) {
             const savedCats = await catRes.json();
             if (savedCats.length > 0) {
-              const mergedClasses = templateClasses.map(template => {
-                const saved = savedCats.find(sc => sc.categoryId === template.id);
+              const mergedClasses = allTemplates.map(template => {
+                // Find matching saved category by ID and Type to avoid collisions
+                const saved = savedCats.find(sc => sc.categoryId === template.id && sc.type === template.type);
                 if (saved) {
                   return {
                     ...template,
@@ -56,7 +74,7 @@ export default function CategoryOverride() {
             }
           }
 
-          setClasses(templateClasses.map((wc) => ({ ...wc, enabled: true, overrideMin: wc.min, overrideMax: wc.max })));
+          setClasses(allTemplates.map((c) => ({ ...c, enabled: true, overrideMin: c.min, overrideMax: c.max })));
         }
       } catch (error) {
         console.error('Failed to fetch event data:', error);
@@ -88,13 +106,16 @@ export default function CategoryOverride() {
     )
   }
 
-  const templateClasses = event.type === 'WT' ? WT_WEIGHT_CLASSES : ITF_WEIGHT_CLASSES;
-
-  const filtered = classes.filter((wc) => {
-    const matchAge = !filterAge || wc.ageGroup === filterAge
-    const matchGender = !filterGender || wc.gender === filterGender
-    return matchAge && matchGender
+  // Filter based on the selected tab (Sparring vs Pattern), Age, and Gender
+  const filtered = classes.filter((c) => {
+    const matchType = c.type === filterType;
+    const matchAge = !filterAge || c.ageGroup === filterAge
+    const matchGender = !filterGender || c.gender === filterGender
+    return matchType && matchAge && matchGender
   })
+
+  // Dropdown options based on the CURRENT view type (so ages don't mix)
+  const currentViewClasses = classes.filter(c => c.type === filterType);
 
   function toggleClass(wcId) {
     setClasses((prev) =>
@@ -114,7 +135,6 @@ export default function CategoryOverride() {
     setClasses((prev) =>
       prev.map((wc) =>
         wc.id === wcId
-          // FIXED: Use wc.min and wc.max instead of defaultMin/Max
           ? { ...wc, overrideMin: wc.min, overrideMax: wc.max }
           : wc
       )
@@ -126,6 +146,7 @@ export default function CategoryOverride() {
       const response = await fetch(`/api/events/${dbEventId}/categories`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
+        // NEW: Ensure we send the 'type' flag down to the database so it knows which is which!
         body: JSON.stringify({ classes })
       });
 
@@ -151,12 +172,11 @@ export default function CategoryOverride() {
       />
       <ScopeBar event={event} switchTo="/admin" isAdmin={true} />
       <div className="wf-body">
-        {/* FIXED: Passed event?.type into the side navigation */}
         <SideNav sections={adminNavSections(id, event?.type)} />
         <main className="wf-main">
           <PageHead
             title="Category Overrides"
-            sub={`Enable/disable weight classes and adjust ±5 kg thresholds for ${event.type} ruleset`}
+            sub={`Toggle ${event.type} divisions and adjust weight thresholds. Disabled categories will be hidden from Excel templates.`}
             right={
               <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                 {saved && <Stamp variant="ok">Saved</Stamp>}
@@ -167,6 +187,22 @@ export default function CategoryOverride() {
             }
           />
 
+          {/* NEW: Discipline Tab Switcher */}
+          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--line)', paddingBottom: '0.5rem' }}>
+             <button 
+                className={`btn btn-sm ${filterType === 'sparring' ? 'btn-primary' : 'btn-ghost'}`} 
+                onClick={() => { setFilterType('sparring'); setFilterAge(''); }}
+             >
+                Sparring (Weights)
+             </button>
+             <button 
+                className={`btn btn-sm ${filterType === 'pattern' ? 'btn-primary' : 'btn-ghost'}`} 
+                onClick={() => { setFilterType('pattern'); setFilterAge(''); }}
+             >
+                Pattern (Poomsae / Tul)
+             </button>
+          </div>
+
           <div className="box" style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '1rem', padding: '0.75rem 1rem' }}>
             <select
               className="field-input field-select"
@@ -176,7 +212,7 @@ export default function CategoryOverride() {
               aria-label="Filter by age group"
             >
               <option value="">All Age Groups</option>
-              {[...new Set(templateClasses.map((wc) => wc.ageGroup))].map((ag) => (
+              {[...new Set(currentViewClasses.map((wc) => wc.ageGroup))].filter(Boolean).map((ag) => (
                 <option key={ag} value={ag}>{ag}</option>
               ))}
             </select>
@@ -203,18 +239,21 @@ export default function CategoryOverride() {
                   <th>On</th>
                   <th>Age Group</th>
                   <th>G</th>
-                  <th>Weight Class</th>
-                  <th>Default Min (kg)</th>
-                  <th>Default Max (kg)</th>
-                  <th>Override Min (kg)</th>
-                  <th>Override Max (kg)</th>
-                  <th>Modified</th>
+                  <th>Category Name</th>
+                  {filterType === 'sparring' && (
+                    <>
+                      <th>Def. Min (kg)</th>
+                      <th>Def. Max (kg)</th>
+                      <th>Override Min (kg)</th>
+                      <th>Override Max (kg)</th>
+                      <th>Modified</th>
+                    </>
+                  )}
                   <th></th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.map((wc) => {
-                  // FIXED: Checking wc.min instead of wc.defaultMin
                   const isModified = wc.overrideMin !== wc.min || wc.overrideMax !== wc.max
                   return (
                     <tr key={wc.id} style={{ opacity: wc.enabled ? 1 : 0.45 }}>
@@ -228,43 +267,46 @@ export default function CategoryOverride() {
                           <span className="toggle-track" />
                         </label>
                       </td>
-                      <td><Chip variant="default">{wc.ageGroup}</Chip></td>
+                      <td><Chip variant="default">{wc.ageGroup || 'Open'}</Chip></td>
                       <td style={{ color: 'var(--muted)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.75rem' }}>{wc.gender}</td>
                       <td className="name">{wc.label}</td>
-                      {/* FIXED: Displaying wc.min and wc.max directly */}
-                      <td className="mono">{wc.min === 0 ? '—' : wc.min}</td>
-                      <td className="mono">{wc.max >= 999 ? '—' : wc.max}</td>
+                      
+                      {/* Only show weight logic if we are in the Sparring tab */}
+                      {filterType === 'sparring' && (
+                        <>
+                          <td className="mono">{wc.min === 0 ? '—' : wc.min}</td>
+                          <td className="mono">{wc.max >= 999 ? '—' : wc.max}</td>
+                          <td>
+                            <input
+                              type="number"
+                              className="field-input"
+                              value={wc.overrideMin === 0 ? '' : wc.overrideMin}
+                              onChange={(e) => setOverride(wc.id, 'overrideMin', e.target.value)}
+                              disabled={!wc.enabled}
+                              placeholder="—"
+                              style={{ width: '80px', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.75rem', padding: '0.3rem 0.5rem' }}
+                              aria-label={`Override min for ${wc.label}`}
+                            />
+                          </td>
+                          <td>
+                            <input
+                              type="number"
+                              className="field-input"
+                              value={wc.overrideMax >= 999 ? '' : wc.overrideMax}
+                              onChange={(e) => setOverride(wc.id, 'overrideMax', e.target.value)}
+                              disabled={!wc.enabled}
+                              placeholder="—"
+                              style={{ width: '80px', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.75rem', padding: '0.3rem 0.5rem' }}
+                              aria-label={`Override max for ${wc.label}`}
+                            />
+                          </td>
+                          <td>
+                            {isModified && <Chip variant="warn">Modified</Chip>}
+                          </td>
+                        </>
+                      )}
                       <td>
-                        <input
-                          type="number"
-                          className="field-input"
-                          value={wc.overrideMin === 0 ? '' : wc.overrideMin}
-                          onChange={(e) => setOverride(wc.id, 'overrideMin', e.target.value)}
-                          disabled={!wc.enabled}
-                          placeholder="—"
-                          style={{ width: '80px', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.75rem', padding: '0.3rem 0.5rem' }}
-                          aria-label={`Override min for ${wc.label}`}
-                        />
-                      </td>
-                      <td>
-                        <input
-                          type="number"
-                          className="field-input"
-                          value={wc.overrideMax >= 999 ? '' : wc.overrideMax}
-                          onChange={(e) => setOverride(wc.id, 'overrideMax', e.target.value)}
-                          disabled={!wc.enabled}
-                          placeholder="—"
-                          style={{ width: '80px', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.75rem', padding: '0.3rem 0.5rem' }}
-                          aria-label={`Override max for ${wc.label}`}
-                        />
-                      </td>
-                      <td>
-                        {isModified && (
-                          <Chip variant="warn">Modified</Chip>
-                        )}
-                      </td>
-                      <td>
-                        {isModified && (
+                        {filterType === 'sparring' && isModified && (
                           <Btn variant="ghost" size="sm" onClick={() => resetClass(wc.id)}>
                             Reset
                           </Btn>
@@ -276,7 +318,7 @@ export default function CategoryOverride() {
                 {filtered.length === 0 && (
                   <tr>
                     <td colSpan={10} style={{ textAlign: 'center', padding: '2rem', color: 'var(--muted)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.75rem' }}>
-                      No weight classes match the filters.
+                      No {filterType} categories match the filters.
                     </td>
                   </tr>
                 )}

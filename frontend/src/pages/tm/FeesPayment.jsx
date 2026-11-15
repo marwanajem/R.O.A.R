@@ -34,9 +34,10 @@ export default function FeesPayment() {
   const [loading, setLoading] = useState(true)
   
   const [fileError, setFileError] = useState('')
-  const [paymentState, setPaymentState] = useState(null) // Stores full payment object (status, amount, etc)
+  const [clubPayments, setClubPayments] = useState([])
+  const [hasJustSubmitted, setHasJustSubmitted] = useState(false)
 
- useEffect(() => {
+  useEffect(() => {
     const fetchData = async () => {
       if (!user?.clubCode) return
 
@@ -44,7 +45,6 @@ export default function FeesPayment() {
         const eventRes = await fetch(`/api/events/${id}`)
         if (eventRes.ok) setEvent(await eventRes.json())
 
-        // Fetch competitors, teams, existing payments
         const [compRes, teamRes, paymentsRes] = await Promise.all([
           fetch(`/api/competitors/event/${id}/club/${user.clubCode}`),
           fetch(`/api/teams/event/${id}/club/${user.clubCode}`),
@@ -54,13 +54,10 @@ export default function FeesPayment() {
         if (compRes.ok) setCompetitors(await compRes.json())
         if (teamRes.ok) setTeams(await teamRes.json())
         
-        // Find if this club has submitted a payment and store the ENTIRE object to read the status
         if (paymentsRes.ok) {
-          const payments = await paymentsRes.json()
-          const myPayment = payments.find(p => p.clubCode === user?.clubCode)
-          if (myPayment) {
-            setPaymentState(myPayment)
-          }
+          const allPayments = await paymentsRes.json()
+          const myPayments = allPayments.filter(p => p.clubCode === user?.clubCode)
+          setClubPayments(myPayments)
         }
       } catch (error) {
         console.error('Failed to load invoice data:', error)
@@ -73,12 +70,49 @@ export default function FeesPayment() {
 
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm()
 
-  const indivRate = parseFloat(event?.individualFee || 0)
-  const teamRate = parseFloat(event?.teamFee || 0)
-  
-  const indivFees = competitors.length * indivRate
-  const teamFees = teams.length * teamRate
-  const totalDue = indivFees + teamFees
+  // Read dynamic category fees
+  const categoryFees = event?.categoryFees ? (typeof event.categoryFees === 'string' ? JSON.parse(event.categoryFees) : event.categoryFees) : {}
+  const parsedCats = event?.categories ? (typeof event.categories === 'string' ? JSON.parse(event.categories) : event.categories) : []
+
+  // Dynamic fee calculation grouped by actual category for itemized billing
+  const billingItems = []
+  let totalDue = 0
+
+  if (parsedCats && parsedCats.length > 0) {
+    parsedCats.forEach(catName => {
+      const isTeamCat = catName.toLowerCase().includes('team') || catName.toLowerCase().includes('pair')
+      const feeRate = parseFloat(categoryFees[catName] || 0)
+      let qty = 0
+
+      if (isTeamCat) {
+        qty = teams.filter(t => t.categoryName === catName).length
+      } else {
+        const isSparringCat = catName.toLowerCase().includes('sparring') || catName.toLowerCase().includes('kyorugi')
+        const isPatternCat = catName.toLowerCase().includes('pattern') || catName.toLowerCase().includes('poomsae')
+
+        qty = competitors.filter(c => {
+          if (isSparringCat && c.isSparring) return true
+          if (isPatternCat && c.isPattern) return true
+          return false
+        }).length
+      }
+
+      if (qty > 0) {
+        const subtotal = qty * feeRate
+        totalDue += subtotal
+        billingItems.push({ label: `${catName} Registration`, qty, rate: feeRate, subtotal })
+      }
+    })
+  }
+
+  const totalVerifiedPaid = clubPayments
+    .filter(p => p.status === 'verified')
+    .reduce((sum, p) => sum + parseFloat(p.amount), 0)
+
+  const remainingBalance = Math.max(0, totalDue - totalVerifiedPaid)
+
+  const hasPendingPayment = clubPayments.some(p => p.status === 'pending') || hasJustSubmitted
+  const hasRejectedPayment = clubPayments.some(p => p.status === 'rejected') && !hasPendingPayment
 
   function validateFile(files) {
     if (!files || files.length === 0) return 'Payment proof is required.'
@@ -109,25 +143,20 @@ export default function FeesPayment() {
       })
       if (!response.ok) throw new Error('Failed to upload payment proof')
       
-      // Optimistically update the UI to show pending
-      setPaymentState({ status: 'pending', amount: data.paymentAmount })
+      setHasJustSubmitted(true)
     } catch (error) {
       console.error(error)
       setFileError('Upload failed. Please try again.')
     }
   }
 
-  // Derive booleans based on the database status
-  const isSubmitted = !!paymentState
-  const isVerified = paymentState?.status === 'verified'
-  const isRejected = paymentState?.status === 'rejected'
-
+  const isFullyPaid = totalDue > 0 && remainingBalance === 0
   const timelineItems = [
     { label: 'Registration open', done: true, date: config.regStart },
     { label: 'Competitors registered', done: competitors.length > 0, date: null },
-    { label: 'Payment submitted', done: isSubmitted && !isRejected, active: !isSubmitted || isRejected, date: null },
-    { label: 'Payment verified by admin', done: isVerified, active: isSubmitted && !isVerified && !isRejected, date: null },
-    { label: 'Registration confirmed', done: isVerified, date: null }, // Automatically confirmed when paid
+    { label: 'Payment submitted', done: isFullyPaid || hasPendingPayment, active: remainingBalance > 0 && !hasPendingPayment, date: null },
+    { label: 'Payment verified by admin', done: isFullyPaid, active: hasPendingPayment && !isFullyPaid, date: null },
+    { label: 'Registration confirmed', done: isFullyPaid, date: null }, 
   ]
 
   if (loading) {
@@ -165,55 +194,72 @@ export default function FeesPayment() {
                     </tr>
                   </thead>
                   <tbody>
-                    <tr>
-                      <td>Individual Registration</td>
-                      <td className="mono">{competitors.length}</td>
-                      <td className="mono">{indivRate}</td>
-                      <td className="mono">{indivFees}</td>
-                    </tr>
-                    <tr>
-                      <td>Team / Pair Registration</td>
-                      <td className="mono">{teams.length}</td>
-                      <td className="mono">{teamRate}</td>
-                      <td className="mono">{teamFees}</td>
-                    </tr>
+                    {billingItems.length === 0 && (
+                      <tr>
+                        <td colSpan="4" style={{ textAlign: 'center', padding: '1rem', color: 'var(--muted)' }}>
+                          No active registrations found.
+                        </td>
+                      </tr>
+                    )}
+                    {billingItems.map((item, index) => (
+                      <tr key={index}>
+                        <td>{item.label}</td>
+                        <td className="mono">{item.qty}</td> 
+                        <td className="mono">{item.rate}</td>
+                        <td className="mono">{item.subtotal}</td>
+                      </tr>
+                    ))}
+                    
+                    {totalVerifiedPaid > 0 && (
+                      <tr style={{ backgroundColor: 'var(--paper-2)' }}>
+                        <td colSpan={3} style={{ textAlign: 'right', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.6875rem', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--ok)' }}>
+                          Previously Verified Payments
+                        </td>
+                        <td style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '1rem', color: 'var(--ok)', fontWeight: 700 }}>
+                          - MYR {totalVerifiedPaid}
+                        </td>
+                      </tr>
+                    )}
+
                     <tr style={{ borderTop: '1px solid var(--line)' }}>
                       <td colSpan={3} style={{ textAlign: 'right', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.6875rem', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--muted)' }}>
-                        Total Due
+                        {totalVerifiedPaid > 0 ? 'Remaining Balance Due' : 'Total Due'}
                       </td>
                       <td style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '1rem', color: 'var(--gold)', fontWeight: 700 }}>
-                        MYR {totalDue}
+                        MYR {remainingBalance}
                       </td>
                     </tr>
                   </tbody>
                 </table>
               </div>
 
-              <div className="box">
-                <div className="section-label" style={{ marginBottom: '0.875rem' }}>Bank Transfer Details</div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                  {[
-                    { label: 'Bank', value: config.bankDetails.bank },
-                    { label: 'Account Name', value: config.bankDetails.accountName },
-                    { label: 'Account No.', value: config.bankDetails.accountNo },
-                    { label: 'Payment Reference', value: config.bankDetails.ref.replace('{clubCode}', user?.clubCode || 'YOURCLUB') },
-                  ].map(({ label, value }) => (
-                    <div key={label}>
-                      <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '0.6rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--muted-2)', marginBottom: '3px' }}>{label}</div>
-                      <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem', color: 'var(--ink)', letterSpacing: '0.04em' }}>{value}</div>
-                    </div>
-                  ))}
+              {remainingBalance > 0 && !hasPendingPayment && (
+                <div className="box">
+                  <div className="section-label" style={{ marginBottom: '0.875rem' }}>Bank Transfer Details</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                    {[
+                      { label: 'Bank', value: event?.bankName || config.bankDetails.bank },
+                      { label: 'Account Name', value: event?.bankAccountName || config.bankDetails.accountName },
+                      { label: 'Account No.', value: event?.bankAccount || config.bankDetails.accountNo },
+                      { label: 'Payment Reference', value: (event?.paymentRefFormat || config.bankDetails.ref).replace('{clubCode}', user?.clubCode || 'YOURCLUB') },
+                    ].map(({ label, value }) => (
+                      <div key={label}>
+                        <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '0.6rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--muted-2)', marginBottom: '3px' }}>{label}</div>
+                        <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem', color: 'var(--ink)', letterSpacing: '0.04em' }}>{value}</div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
 
-              {/* RENDER DYNAMIC MESSAGE BASED ON PAYMENT STATUS */}
-              {!isSubmitted || isRejected ? (
+              {/* DYNAMIC UPLOAD FORM OR STATUS MESSAGE */}
+              {remainingBalance > 0 && !hasPendingPayment ? (
                 <div className="box">
                   <div className="section-label">Upload Payment Proof</div>
-                  {isRejected && (
+                  {hasRejectedPayment && (
                     <div style={{ padding: '0.75rem', marginBottom: '1rem', background: 'rgba(240, 112, 96, 0.1)', border: '1px solid var(--stamp)', borderRadius: '4px' }}>
                       <p style={{ margin: 0, fontSize: '0.8125rem', color: 'var(--stamp)' }}>
-                        Your previous payment proof was rejected by the admin. Please upload a new valid receipt.
+                        A previous payment proof was rejected by the admin. Please upload a new valid receipt for the remaining balance.
                       </p>
                     </div>
                   )}
@@ -222,14 +268,15 @@ export default function FeesPayment() {
                       <Field
                         label="Payment Reference / Transaction ID"
                         name="paymentRef" id="paymentRef" type="text" autoComplete="off" required
-                        placeholder={`e.g. ${config.bankDetails.ref.replace('{clubCode}', user?.clubCode || 'YOURCLUB')}-20260604`}
+                        placeholder={`e.g. ${(event?.paymentRefFormat || config.bankDetails.ref).replace('{clubCode}', user?.clubCode || 'YOURCLUB')}-20260604`}
                         error={errors.paymentRef?.message}
                         {...register('paymentRef', { required: 'Payment reference is required.', minLength: { value: 5, message: 'Reference too short.' } })}
                       />
                       <Field
                         label="Amount Transferred (MYR)"
                         name="paymentAmount" id="paymentAmount" type="number" inputMode="decimal" autoComplete="off" required
-                        placeholder={String(totalDue)}
+                        placeholder={String(remainingBalance)}
+                        defaultValue={String(remainingBalance)}
                         error={errors.paymentAmount?.message}
                         {...register('paymentAmount', { required: 'Amount is required.', min: { value: 1, message: 'Amount must be positive.' } })}
                       />
@@ -254,11 +301,11 @@ export default function FeesPayment() {
                     </Btn>
                   </form>
                 </div>
-              ) : isVerified ? (
+              ) : isFullyPaid ? (
                 <div className="box" style={{ textAlign: 'center', padding: '2.5rem' }}>
-                  <Stamp variant="ok" style={{ fontSize: '1rem', marginBottom: '0.75rem' }}>Verified</Stamp>
+                  <Stamp variant="ok" style={{ fontSize: '1rem', marginBottom: '0.75rem' }}>Paid in Full</Stamp>
                   <p style={{ color: 'var(--ink-2)', marginTop: '0.75rem', fontSize: '0.9rem' }}>
-                    Your payment of MYR {paymentState.amount} has been fully verified by the administrator. 
+                    Your total payments of MYR {totalVerifiedPaid} cover your entire roster.
                   </p>
                   <p style={{ color: 'var(--muted-2)', marginTop: '0.5rem', fontSize: '0.8rem' }}>
                     Your registration for this event is confirmed.
@@ -266,9 +313,9 @@ export default function FeesPayment() {
                 </div>
               ) : (
                 <div className="box" style={{ textAlign: 'center', padding: '2.5rem' }}>
-                  <Stamp variant="gold" style={{ fontSize: '1rem', marginBottom: '0.75rem' }}>Pending</Stamp>
+                  <Stamp variant="gold" style={{ fontSize: '1rem', marginBottom: '0.75rem' }}>Pending Admin Verification</Stamp>
                   <p style={{ color: 'var(--ink-2)', marginTop: '0.75rem', fontSize: '0.9rem' }}>
-                    Payment proof submitted successfully.
+                    You have submitted a payment proof for the remaining balance.
                   </p>
                   <p style={{ color: 'var(--muted-2)', marginTop: '0.5rem', fontSize: '0.8rem' }}>
                     Your receipt is currently awaiting admin verification.

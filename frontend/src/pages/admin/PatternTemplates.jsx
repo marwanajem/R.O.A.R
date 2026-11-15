@@ -8,11 +8,11 @@ import Stamp from '../../components/ui/Stamp'
 import { ITF_PATTERN_CLASSES, WT_PATTERN_CLASSES } from '../../data/patternTemplates'
 import { adminTopNavSections } from '../../utils/navSections'
 
-function blankPatternClass(ruleset, id) {
-  return { id, ruleset, ageGroup: '', gender: 'M', beltGroup: 'Black Belt', label: '', requiredPattern: '' }
+function blankPatternClass(ruleset, eventType, id) {
+  return { id, ruleset, eventType, ageGroup: '', gender: 'M', beltGroup: 'Black Belt', label: '', requiredPattern: '' }
 }
 
-function PatternEditor({ ruleset, fallbackClasses }) {
+function PatternEditor({ ruleset, activeFormat, fallbackClasses }) {
   const [classes, setClasses] = useState([])
   const [loading, setLoading] = useState(true)
   const [filterAge, setFilterAge] = useState('')
@@ -31,8 +31,9 @@ function PatternEditor({ ruleset, fallbackClasses }) {
             setClasses(data)
             setNextId(data.length + 1)
           } else {
-            setClasses(fallbackClasses)
-            setNextId(fallbackClasses.length + 1)
+            const defaults = fallbackClasses.map(c => ({...c, eventType: c.eventType || 'Individual'}))
+            setClasses(defaults)
+            setNextId(defaults.length + 1)
           }
         }
       } catch(e) {
@@ -44,9 +45,10 @@ function PatternEditor({ ruleset, fallbackClasses }) {
     fetchTemplates()
   }, [ruleset, fallbackClasses])
 
-  const ageGroups = [...new Set(classes.map((wc) => wc.ageGroup))]
+  const formatClasses = classes.filter(c => (c.eventType || 'Individual').toLowerCase() === activeFormat.toLowerCase())
+  const ageGroups = [...new Set(formatClasses.map((wc) => wc.ageGroup))]
 
-  const filtered = classes.filter((wc) => {
+  const filtered = formatClasses.filter((wc) => {
     const matchAge = !filterAge || wc.ageGroup === filterAge
     const matchGender = !filterGender || wc.gender === filterGender
     return matchAge && matchGender
@@ -62,7 +64,7 @@ function PatternEditor({ ruleset, fallbackClasses }) {
     const id = `${ruleset.toLowerCase()}-pat-new-${nextId}`
     setNextId((n) => n + 1)
     
-    const newRow = blankPatternClass(ruleset, id)
+    const newRow = blankPatternClass(ruleset, activeFormat, id)
     if (filterAge) newRow.ageGroup = filterAge
     if (filterGender) newRow.gender = filterGender
     
@@ -101,23 +103,25 @@ function PatternEditor({ ruleset, fallbackClasses }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
       <div className="box" style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', padding: '0.75rem 1rem', alignItems: 'center' }}>
+        
         <select className="field-input field-select" value={filterAge} onChange={(e) => setFilterAge(e.target.value)} style={{ width: '150px' }}>
           <option value="">All Age Groups</option>
           {ageGroups.map((ag) => (
             <option key={ag} value={ag}>{ag}</option>
           ))}
         </select>
-        <select className="field-input field-select" value={filterGender} onChange={(e) => setFilterGender(e.target.value)} style={{ width: '130px' }}>
+        <select className="field-input field-select" value={filterGender} onChange={(e) => setFilterGender(e.target.value)} style={{ width: '120px' }}>
           <option value="">All Genders</option>
           <option value="M">Male</option>
           <option value="F">Female</option>
+          <option value="F">Mixed</option>
         </select>
         <span style={{ marginLeft: 'auto', fontSize: '0.75rem', color: 'var(--muted)', fontFamily: 'JetBrains Mono, monospace' }}>
           {filtered.length} classes shown
         </span>
         {saved && <Stamp variant="ok">Saved</Stamp>}
         <Btn variant="ghost" size="sm" type="button" onClick={addClass}>+ Add Row</Btn>
-        <Btn variant="primary" size="sm" type="button" onClick={handleSave}>Save Template</Btn>
+        <Btn variant="primary" size="sm" type="button" onClick={handleSave}>Save {activeFormat} Template</Btn>
       </div>
 
       <div className="box" style={{ padding: 0, overflow: 'hidden' }}>
@@ -157,7 +161,7 @@ function PatternEditor({ ruleset, fallbackClasses }) {
                       value={wc.ageGroup}
                       disabled={!isEditing}
                       onChange={(e) => updateClass(wc.id, 'ageGroup', e.target.value)}
-                      style={{ ...inputStyle, width: '110px' }}
+                      style={{ ...inputStyle, width: '100px' }}
                     />
                   </td>
                   <td>
@@ -166,10 +170,11 @@ function PatternEditor({ ruleset, fallbackClasses }) {
                       value={wc.gender}
                       disabled={!isEditing}
                       onChange={(e) => updateClass(wc.id, 'gender', e.target.value)}
-                      style={{ ...inputStyle, width: '60px', padding: isEditing ? '0.3rem 1.5rem 0.3rem 0.5rem' : '0.3rem' }}
+                      style={{ ...inputStyle, width: '55px', padding: isEditing ? '0.3rem 1.5rem 0.3rem 0.5rem' : '0.3rem' }}
                     >
                       <option value="M">M</option>
                       <option value="F">F</option>
+                      <option value="Mixed">Mixed</option>
                     </select>
                   </td>
                   <td>
@@ -179,7 +184,7 @@ function PatternEditor({ ruleset, fallbackClasses }) {
                       value={wc.beltGroup}
                       disabled={!isEditing}
                       onChange={(e) => updateClass(wc.id, 'beltGroup', e.target.value)}
-                      style={{ ...inputStyle, width: '110px' }}
+                      style={{ ...inputStyle, width: '100px' }}
                     />
                   </td>
                   <td>
@@ -189,7 +194,7 @@ function PatternEditor({ ruleset, fallbackClasses }) {
                       value={wc.label}
                       disabled={!isEditing}
                       onChange={(e) => updateClass(wc.id, 'label', e.target.value)}
-                      style={{ ...inputStyle, width: '180px' }}
+                      style={{ ...inputStyle, width: '160px' }}
                     />
                   </td>
                   <td>
@@ -200,7 +205,7 @@ function PatternEditor({ ruleset, fallbackClasses }) {
                       disabled={!isEditing}
                       onChange={(e) => updateClass(wc.id, 'requiredPattern', e.target.value)}
                       placeholder="e.g. Chon-Ji"
-                      style={{ ...inputStyle, width: '160px' }}
+                      style={{ ...inputStyle, width: '140px' }}
                     />
                   </td>
                   <td style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
@@ -216,8 +221,9 @@ function PatternEditor({ ruleset, fallbackClasses }) {
             })}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: 'var(--muted)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.75rem' }}>
-                  No pattern divisions match the filters.
+                <td colSpan={6} style={{ textAlign: 'center', padding: '3rem', color: 'var(--muted)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.75rem' }}>
+                  No {activeFormat.toLowerCase()} classes match the filters. <br/><br/>
+                  <Btn variant="ghost" size="sm" type="button" onClick={addClass}>+ Create First {activeFormat} Row</Btn>
                 </td>
               </tr>
             )}
@@ -230,6 +236,17 @@ function PatternEditor({ ruleset, fallbackClasses }) {
 
 export default function PatternTemplates() {
   const [activeTab, setActiveTab] = useState('ITF')
+  const [activeFormat, setActiveFormat] = useState('Individual')
+
+  const itfFormats = ['Individual', 'Pair','Team']
+  const wtFormats = ['Individual', 'Pair', 'Team']
+  
+  const currentFormats = activeTab === 'ITF' ? itfFormats : wtFormats
+
+  // Auto-switch format if the user toggles rulesets and the current format isn't supported
+  useEffect(() => {
+    // Both support all three formats now, but leaving this for future-proofing
+  }, [activeTab, activeFormat])
 
   return (
     <div className="wf">
@@ -242,42 +259,77 @@ export default function PatternTemplates() {
             sub="Global defaults for forms and patterns — applied when setting up championships"
           />
 
-          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.25rem' }}>
-            {['ITF', 'WT'].map((rs) => {
-              const isActive = activeTab === rs;
-              const activeColor = rs === 'WT' ? '#3b82f6' : 'var(--gold, #d4af37)';
-              const activeBg = rs === 'WT' ? 'rgba(59, 130, 246, 0.15)' : 'var(--gold-deep, rgba(212, 175, 55, 0.15))';
-              
-              return (
-                <button
-                  key={rs}
-                  type="button"
-                  onClick={() => setActiveTab(rs)}
-                  style={{
-                    cursor: 'pointer',
-                    padding: '0.45rem 1.25rem',
-                    fontFamily: 'Saira Condensed, sans-serif',
-                    fontSize: '1rem',
-                    fontWeight: 700,
-                    letterSpacing: '0.06em',
-                    borderRadius: '4px',
-                    transition: 'all 0.15s',
-                    border: isActive ? `1px solid ${activeColor}` : '1px solid var(--line)',
-                    backgroundColor: isActive ? activeBg : 'transparent',
-                    color: isActive ? activeColor : 'var(--muted)'
-                  }}
-                >
-                  {rs}
-                </button>
-              )
-            })}
-            <Chip variant="default" style={{ alignSelf: 'center', marginLeft: '0.5rem' }}>
-              {activeTab === 'ITF' ? 'International Taekwon-Do Federation' : 'World Taekwondo'}
-            </Chip>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.25rem' }}>
+            
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              {['ITF', 'WT'].map((rs) => {
+                const isActive = activeTab === rs;
+                const activeColor = rs === 'WT' ? '#3b82f6' : 'var(--gold, #d4af37)';
+                const activeBg = rs === 'WT' ? 'rgba(59, 130, 246, 0.15)' : 'var(--gold-deep, rgba(212, 175, 55, 0.15))';
+                
+                return (
+                  <button
+                    key={rs}
+                    type="button"
+                    onClick={() => setActiveTab(rs)}
+                    style={{
+                      cursor: 'pointer',
+                      padding: '0.45rem 1.25rem',
+                      fontFamily: 'Saira Condensed, sans-serif',
+                      fontSize: '1rem',
+                      fontWeight: 700,
+                      letterSpacing: '0.06em',
+                      borderRadius: '4px',
+                      transition: 'all 0.15s',
+                      border: isActive ? `1px solid ${activeColor}` : '1px solid var(--line)',
+                      backgroundColor: isActive ? activeBg : 'transparent',
+                      color: isActive ? activeColor : 'var(--muted)'
+                    }}
+                  >
+                    {rs}
+                  </button>
+                )
+              })}
+              <Chip variant="default" style={{ alignSelf: 'center', marginLeft: '0.5rem' }}>
+                {activeTab === 'ITF' ? 'International Taekwon-Do Federation' : 'World Taekwondo'}
+              </Chip>
+            </div>
+
+            <div style={{ display: 'flex', gap: '0.5rem', borderBottom: '1px solid var(--line)', paddingBottom: '0.5rem' }}>
+              {currentFormats.map(fmt => {
+                 const isActiveFmt = activeFormat === fmt;
+                 const activeColor = activeTab === 'WT' ? '#3b82f6' : 'var(--gold, #d4af37)';
+                 const activeBg = activeTab === 'WT' ? 'rgba(59, 130, 246, 0.15)' : 'var(--gold-deep, rgba(212, 175, 55, 0.15))';
+
+                 return (
+                   <button
+                     key={fmt}
+                     type="button"
+                     onClick={() => setActiveFormat(fmt)}
+                     style={{
+                       cursor: 'pointer',
+                       padding: '0.35rem 1rem',
+                       fontSize: '0.75rem',
+                       fontWeight: 600,
+                       textTransform: 'uppercase',
+                       letterSpacing: '0.05em',
+                       borderRadius: '4px',
+                       border: isActiveFmt ? `1px solid ${activeColor}` : '1px solid transparent',
+                       backgroundColor: isActiveFmt ? activeBg : 'transparent',
+                       color: isActiveFmt ? activeColor : 'var(--muted)',
+                       transition: 'all 0.15s'
+                     }}
+                   >
+                     {fmt}
+                   </button>
+                 )
+              })}
+            </div>
+
           </div>
 
-          {activeTab === 'ITF' && <PatternEditor key="ITF" ruleset="ITF" fallbackClasses={ITF_PATTERN_CLASSES} />}
-          {activeTab === 'WT' && <PatternEditor key="WT" ruleset="WT" fallbackClasses={WT_PATTERN_CLASSES} />}
+          {activeTab === 'ITF' && <PatternEditor key="ITF" ruleset="ITF" activeFormat={activeFormat} fallbackClasses={ITF_PATTERN_CLASSES} />}
+          {activeTab === 'WT' && <PatternEditor key="WT" ruleset="WT" activeFormat={activeFormat} fallbackClasses={WT_PATTERN_CLASSES} />}
         </main>
       </div>
     </div>

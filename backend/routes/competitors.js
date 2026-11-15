@@ -3,52 +3,42 @@ import pool from '../server.js';
 
 const router = express.Router();
 
-// POST: Add a new competitor
-router.post('/', async (req, res) => {
-  try {
-    
-    const { 
-      eventId, clubCode, fullName, icMasked, dob, gender, 
-      beltGrade, ageCategory, beltGroup, weightKg, 
-      weightCategory, patternFormat, isSparring, isPattern 
-    } = req.body;
+/* 
+  ========================================================
+  NOTE: Manual POST ('/') and Bulk Upload ('/bulk') routes 
+  have been permanently removed. 
+  
+  Athlete registration is now exclusively handled via the 
+  Master Roster Smart Registration engine in events.js 
+  to enforce strict weight, age, and gender rules.
+  ========================================================
+*/
 
-    
-    await pool.query(
-      `INSERT INTO competitors 
-       (eventId, clubCode, fullName, icMasked, dob, gender, beltGrade, ageCategory, beltGroup, weightKg, weightCategory, patternFormat, isSparring, isPattern, status) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
-      [eventId, clubCode, fullName, icMasked, dob, gender, beltGrade, ageCategory, beltGroup, weightKg, weightCategory, patternFormat, isSparring, isPattern]
-    );
-
-    res.status(201).json({ message: 'Competitor added successfully' });
-  } catch (error) {
-    console.error('Error adding competitor:', error);
-    res.status(500).json({ error: 'Failed to add competitor' });
-  }
-});
-
-// GET: Fetch competitors for a specific event AND club
+// GET: Fetch event-specific competitors for a club (Required for Team Builder!)
 router.get('/event/:eventId/club/:clubCode', async (req, res) => {
   try {
     const { eventId, clubCode } = req.params;
+    
+    // Selects all columns including patternFormat and weightCategory
     const [competitors] = await pool.query(
-      'SELECT * FROM competitors WHERE eventId = ? AND clubCode = ? ORDER BY created_at ASC',
+      `SELECT * FROM competitors WHERE eventId = ? AND clubCode = ?`,
       [eventId, clubCode]
     );
+    
     res.json(competitors);
   } catch (error) {
-    console.error('Error fetching competitors:', error);
+    console.error('Error fetching event club competitors:', error);
     res.status(500).json({ error: 'Failed to fetch competitors' });
   }
 });
 
-// PUT: Update an existing competitor
+// PUT: Update an existing competitor snapshot (EditCompetitor.jsx)
+// Used when an Admin or TM needs to manually adjust a drafted athlete
 router.put('/:id', async (req, res) => {
   try {
     const { 
       fullName, icMasked, dob, gender, beltGrade, 
-      ageCategory, beltGroup, weightKg, weightCategory, patternFormat,isSparring, isPattern
+      ageCategory, beltGroup, weightKg, weightCategory, patternFormat, isSparring, isPattern
     } = req.body;
 
     const [result] = await pool.query(
@@ -56,7 +46,7 @@ router.put('/:id', async (req, res) => {
        SET fullName = ?, icMasked = ?, dob = ?, gender = ?, beltGrade = ?, 
            ageCategory = ?, beltGroup = ?, weightKg = ?, weightCategory = ?, patternFormat = ?, isSparring=?, isPattern=?
        WHERE id = ?`,
-      [fullName, icMasked, dob, gender, beltGrade, ageCategory, beltGroup, weightKg, weightCategory, patternFormat,isSparring, isPattern, req.params.id]
+      [fullName, icMasked, dob, gender, beltGrade, ageCategory, beltGroup, weightKg, weightCategory, patternFormat, isSparring, isPattern, req.params.id]
     );
 
     if (result.affectedRows === 0) {
@@ -70,39 +60,7 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// POST: Bulk upload competitors (from CSV)
-router.post('/bulk', async (req, res) => {
-  try {
-    const { competitors } = req.body;
-
-    if (!competitors || competitors.length === 0) {
-      return res.status(400).json({ error: 'No competitors provided' });
-    }
-   
-    const values = competitors.map(c => [
-      c.eventId, c.clubCode, c.fullName, c.icMasked, c.dob, c.gender,
-      c.beltGrade, c.ageCategory, c.beltGroup, c.weightKg, c.weightCategory, c.patternFormat, 'pending' 
-    ]);
-   
-    const [result] = await pool.query(
-      `INSERT INTO competitors 
-      (eventId, clubCode, fullName, icMasked, dob, gender, beltGrade, ageCategory, beltGroup, weightKg, weightCategory, patternFormat, status) 
-      VALUES ?`,
-      [values]
-    );
-
-    res.status(201).json({ 
-      success: true,
-      message: `Successfully added ${result.affectedRows} competitors`,
-      count: result.affectedRows 
-    });
-  } catch (error) {
-    console.error('Error in bulk upload:', error);
-    res.status(500).json({ error: 'Failed to upload competitors' });
-  }
-});
-
-// DELETE: Remove a competitor
+// DELETE: Remove a competitor from an event (Withdrawal or fixing a mistake)
 router.delete('/:id', async (req, res) => {
   try {
     const [result] = await pool.query('DELETE FROM competitors WHERE id = ?', [req.params.id]);
@@ -118,7 +76,8 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
-// GET: Fetch ALL competitors for a specific club (Master Roster) // page: Mater lsit athlete
+// GET: Fetch ALL historical event registrations for a specific club 
+// (Used by Overall Club Stats / Historical views)
 router.get('/club/:clubCode', async (req, res) => {
   try {
     const { clubCode } = req.params;
@@ -132,8 +91,8 @@ router.get('/club/:clubCode', async (req, res) => {
     );
     res.json(competitors);
   } catch (error) {
-    console.error('Error fetching master roster:', error);
-    res.status(500).json({ error: 'Failed to fetch master roster' });
+    console.error('Error fetching historical club roster:', error);
+    res.status(500).json({ error: 'Failed to fetch historical club roster' });
   }
 });
 

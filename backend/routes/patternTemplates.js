@@ -12,6 +12,7 @@ router.get('/:ruleset', async (req, res) => {
       SELECT 
         id, 
         ruleset, 
+        eventType, /* <-- FIXED: Removed the rogue 'format' column here */
         ageGroup, 
         gender, 
         beltGroup, 
@@ -37,14 +38,13 @@ router.patch('/:ruleset', async (req, res) => {
 
     await connection.beginTransaction();
 
-   
     await connection.query('DELETE FROM pattern_templates WHERE ruleset = ?', [ruleset]);
-
     
     if (classes && classes.length > 0) {
       const insertValues = classes.map(c => [
         c.id,
         ruleset,
+        c.eventType || 'Individual', /* <-- TWEAKED: Capitalized to match frontend state */
         c.ageGroup,
         c.gender,
         c.beltGroup,
@@ -54,7 +54,7 @@ router.patch('/:ruleset', async (req, res) => {
 
       await connection.query(`
         INSERT INTO pattern_templates 
-        (id, ruleset, ageGroup, gender, beltGroup, label, requiredPattern) 
+        (id, ruleset, eventType, ageGroup, gender, beltGroup, label, requiredPattern) 
         VALUES ?
       `, [insertValues]);
     }

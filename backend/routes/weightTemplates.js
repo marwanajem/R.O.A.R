@@ -8,11 +8,11 @@ router.get('/:ruleset', async (req, res) => {
   try {
     const ruleset = req.params.ruleset.toUpperCase();
     
-    
     const [rows] = await pool.query(`
       SELECT 
         id, 
-        ruleset, 
+        ruleset,
+        format,      /* <-- NEW: Added format to retrieval */
         ageGroup, 
         gender, 
         label, 
@@ -38,25 +38,23 @@ router.patch('/:ruleset', async (req, res) => {
 
     await connection.beginTransaction();
 
-    
     await connection.query('DELETE FROM weight_templates WHERE ruleset = ?', [ruleset]);
 
-   
     if (classes && classes.length > 0) {
       const insertValues = classes.map(c => [
         c.id,
         ruleset,
+        c.format || 'Individual', // <-- NEW: Added format (with a safety fallback)
         c.ageGroup,
         c.gender,
         c.label,
         parseFloat(c.min) || 0,
-        parseFloat(c.max) || 999 // Fallback to 999 for "open" max weights
+        parseFloat(c.max) || 999 
       ]);
-
       
       await connection.query(`
         INSERT INTO weight_templates 
-        (id, ruleset, ageGroup, gender, label, \`min\`, \`max\`) 
+        (id, ruleset, format, ageGroup, gender, label, \`min\`, \`max\`) /* <-- NEW: Added format column */
         VALUES ?
       `, [insertValues]);
     }

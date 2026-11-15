@@ -8,11 +8,12 @@ import Stamp from '../../components/ui/Stamp'
 import { ITF_WEIGHT_CLASSES, WT_WEIGHT_CLASSES } from '../../data/weightTemplates'
 import { adminTopNavSections } from '../../utils/navSections'
 
-function blankClass(ruleset, id) {
-  return { id, ruleset, ageGroup: '', gender: 'M', label: '', min: 0, max: 0, defaultMin: 0, defaultMax: 0 }
+// Added `format` to the blank class template
+function blankClass(ruleset, format, id) {
+  return { id, ruleset, format, ageGroup: '', gender: 'M', label: '', min: 0, max: 0, defaultMin: 0, defaultMax: 0 }
 }
 
-function TemplateEditor({ ruleset, fallbackClasses }) {
+function TemplateEditor({ ruleset, activeFormat, fallbackClasses }) {
   const [classes, setClasses] = useState([])
   const [loading, setLoading] = useState(true)
   const [filterAge, setFilterAge] = useState('')
@@ -22,7 +23,6 @@ function TemplateEditor({ ruleset, fallbackClasses }) {
   
   const [editingId, setEditingId] = useState(null)
 
-  
   useEffect(() => {
     async function fetchTemplates() {
       try {
@@ -33,8 +33,10 @@ function TemplateEditor({ ruleset, fallbackClasses }) {
             setClasses(data.map(d => ({...d, min: Number(d.min), max: Number(d.max)})))
             setNextId(data.length + 1)
           } else {
-            setClasses(fallbackClasses)
-            setNextId(fallbackClasses.length + 1)
+            // Apply a default format of 'Individual' to the fallback imports if they lack one
+            const formattedFallback = fallbackClasses.map(fc => ({ ...fc, format: fc.format || 'Individual' }))
+            setClasses(formattedFallback)
+            setNextId(formattedFallback.length + 1)
           }
         }
       } catch(e) {
@@ -46,9 +48,14 @@ function TemplateEditor({ ruleset, fallbackClasses }) {
     fetchTemplates()
   }, [ruleset, fallbackClasses])
 
-  const ageGroups = [...new Set(classes.map((wc) => wc.ageGroup))]
+  // 1. First, isolate the classes that belong to the currently active Format (Indi/Pair/Team)
+  const formatClasses = classes.filter(c => (c.format || 'Individual') === activeFormat)
 
-  const filtered = classes.filter((wc) => {
+  // 2. Generate age groups based ONLY on the current format
+  const ageGroups = [...new Set(formatClasses.map((wc) => wc.ageGroup))]
+
+  // 3. Apply the user's Age/Gender filters
+  const filtered = formatClasses.filter((wc) => {
     const matchAge = !filterAge || wc.ageGroup === filterAge
     const matchGender = !filterGender || wc.gender === filterGender
     return matchAge && matchGender
@@ -61,12 +68,12 @@ function TemplateEditor({ ruleset, fallbackClasses }) {
   }
 
   function addClass() {
-    const id = `${ruleset.toLowerCase()}-new-${nextId}`
+    const id = `${ruleset.toLowerCase()}-${activeFormat.toLowerCase()}-new-${nextId}`
     setNextId((n) => n + 1)
     
-    const newRow = blankClass(ruleset, id)
+    // Inject the activeFormat when generating a new row
+    const newRow = blankClass(ruleset, activeFormat, id)
     
-
     if (filterAge) newRow.ageGroup = filterAge
     if (filterGender) newRow.gender = filterGender
     
@@ -79,10 +86,10 @@ function TemplateEditor({ ruleset, fallbackClasses }) {
     if (editingId === id) setEditingId(null)
   }
 
-
   async function handleSave() {
     setEditingId(null) 
     try {
+      // Saves the master list (containing all formats for this ruleset)
       const response = await fetch(`/api/weight-templates/${ruleset}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -101,7 +108,6 @@ function TemplateEditor({ ruleset, fallbackClasses }) {
     return <div style={{ padding: '2rem', color: 'var(--muted)' }}>Loading templates...</div>
   }
 
-  
   const accentColor = ruleset === 'WT' ? '#3b82f6' : 'var(--gold, #d4af37)'
 
   return (
@@ -124,7 +130,7 @@ function TemplateEditor({ ruleset, fallbackClasses }) {
         </span>
         {saved && <Stamp variant="ok">Saved</Stamp>}
         <Btn variant="ghost" size="sm" type="button" onClick={addClass}>+ Add Row</Btn>
-        <Btn variant="primary" size="sm" type="button" onClick={handleSave}>Save Template</Btn>
+        <Btn variant="primary" size="sm" type="button" onClick={handleSave}>Save {activeFormat} Template</Btn>
       </div>
 
       <div className="box" style={{ padding: 0, overflow: 'hidden' }}>
@@ -142,7 +148,6 @@ function TemplateEditor({ ruleset, fallbackClasses }) {
           <tbody>
             {filtered.map((wc) => {
               const isEditing = editingId === wc.id;
-              
               
               const rowStyle = isEditing 
                 ? { backgroundColor: 'var(--paper-3)', boxShadow: `inset 3px 0 0 0 ${accentColor}` } 
@@ -179,6 +184,7 @@ function TemplateEditor({ ruleset, fallbackClasses }) {
                     >
                       <option value="M">M</option>
                       <option value="F">F</option>
+                      <option value="Mixed">Mixed</option>
                     </select>
                   </td>
                   <td>
@@ -226,8 +232,9 @@ function TemplateEditor({ ruleset, fallbackClasses }) {
             })}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: 'var(--muted)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.75rem' }}>
-                  No weight classes match the filters.
+                <td colSpan={6} style={{ textAlign: 'center', padding: '3rem', color: 'var(--muted)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.75rem' }}>
+                  No {activeFormat.toLowerCase()} classes match the filters. <br/><br/>
+                  <Btn variant="ghost" size="sm" type="button" onClick={addClass}>+ Create First {activeFormat} Row</Btn>
                 </td>
               </tr>
             )}
@@ -240,7 +247,21 @@ function TemplateEditor({ ruleset, fallbackClasses }) {
 
 export default function WeightTemplates() {
   const [activeTab, setActiveTab] = useState('ITF')
+  const [activeFormat, setActiveFormat] = useState('Individual')
 
+  // Available formats based on Ruleset for Weight Classes (Sparring/Kyorugi)
+  const itfFormats = ['Individual', 'Team']
+  const wtFormats = ['Individual', 'Team']
+  
+  const currentFormats = activeTab === 'ITF' ? itfFormats : wtFormats
+
+  // Auto-switch format if the user toggles rulesets and the current format isn't supported (e.g., Pair in ITF)
+ useEffect(() => {
+    // Currently, both are ['Individual', 'Team'], so this is just a safeguard
+    if (activeFormat === 'Pair') {
+      setActiveFormat('Individual')
+    }
+  }, [activeTab, activeFormat])
   return (
     <div className="wf">
       <TopBar breadcrumbs={[{ label: 'Admin', to: '/admin' }, { label: 'Weight Templates' }]} />
@@ -252,42 +273,79 @@ export default function WeightTemplates() {
             sub="Global defaults for ITF and WT rulesets — applied when creating a new event"
           />
 
-          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.25rem' }}>
-            {['ITF', 'WT'].map((rs) => {
-              const isActive = activeTab === rs;
-              const activeColor = rs === 'WT' ? '#3b82f6' : 'var(--gold, #d4af37)';
-              const activeBg = rs === 'WT' ? 'rgba(59, 130, 246, 0.15)' : 'var(--gold-deep, rgba(212, 175, 55, 0.15))';
-              
-              return (
-                <button
-                  key={rs}
-                  type="button"
-                  onClick={() => setActiveTab(rs)}
-                  style={{
-                    cursor: 'pointer',
-                    padding: '0.45rem 1.25rem',
-                    fontFamily: 'Saira Condensed, sans-serif',
-                    fontSize: '1rem',
-                    fontWeight: 700,
-                    letterSpacing: '0.06em',
-                    borderRadius: '4px',
-                    transition: 'all 0.15s',
-                    border: isActive ? `.5px solid ${activeColor}` : '.5px solid var(--line)',
-                    backgroundColor: isActive ? activeBg : 'transparent',
-                    color: isActive ? activeColor : 'var(--muted)'
-                  }}
-                >
-                  {rs}
-                </button>
-              )
-            })}
-            <Chip variant="default" style={{ alignSelf: 'center', marginLeft: '0.5rem' }}>
-              {activeTab === 'ITF' ? 'International Taekwon-Do Federation' : 'World Taekwondo'}
-            </Chip>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.25rem' }}>
+            
+            {/* Primary Toggle: Ruleset */}
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              {['ITF', 'WT'].map((rs) => {
+                const isActive = activeTab === rs;
+                const activeColor = rs === 'WT' ? '#3b82f6' : 'var(--gold, #d4af37)';
+                const activeBg = rs === 'WT' ? 'rgba(59, 130, 246, 0.15)' : 'var(--gold-deep, rgba(212, 175, 55, 0.15))';
+                
+                return (
+                  <button
+                    key={rs}
+                    type="button"
+                    onClick={() => setActiveTab(rs)}
+                    style={{
+                      cursor: 'pointer',
+                      padding: '0.45rem 1.25rem',
+                      fontFamily: 'Saira Condensed, sans-serif',
+                      fontSize: '1rem',
+                      fontWeight: 700,
+                      letterSpacing: '0.06em',
+                      borderRadius: '4px',
+                      transition: 'all 0.15s',
+                      border: isActive ? `.5px solid ${activeColor}` : '.5px solid var(--line)',
+                      backgroundColor: isActive ? activeBg : 'transparent',
+                      color: isActive ? activeColor : 'var(--muted)'
+                    }}
+                  >
+                    {rs}
+                  </button>
+                )
+              })}
+              <Chip variant="default" style={{ alignSelf: 'center', marginLeft: '0.5rem' }}>
+                {activeTab === 'ITF' ? 'International Taekwon-Do Federation' : 'World Taekwondo'}
+              </Chip>
+            </div>
+
+           {/* Secondary Toggle: Format (Indi / Pair / Team) */}
+            <div style={{ display: 'flex', gap: '0.5rem', borderBottom: '1px solid var(--line)', paddingBottom: '0.5rem' }}>
+              {currentFormats.map(fmt => {
+                 const isActiveFmt = activeFormat === fmt;
+                 const activeColor = activeTab === 'WT' ? '#3b82f6' : 'var(--gold, #d4af37)';
+                 const activeBg = activeTab === 'WT' ? 'rgba(59, 130, 246, 0.15)' : 'var(--gold-deep, rgba(212, 175, 55, 0.15))';
+
+                 return (
+                   <button
+                     key={fmt}
+                     type="button"
+                     onClick={() => setActiveFormat(fmt)}
+                     style={{
+                       cursor: 'pointer',
+                       padding: '0.35rem 1rem',
+                       fontSize: '0.75rem',
+                       fontWeight: 600,
+                       textTransform: 'uppercase',
+                       letterSpacing: '0.05em',
+                       borderRadius: '4px', // Matched to the main toggle
+                       border: isActiveFmt ? `1px solid ${activeColor}` : '1px solid transparent',
+                       backgroundColor: isActiveFmt ? activeBg : 'transparent',
+                       color: isActiveFmt ? activeColor : 'var(--muted)',
+                       transition: 'all 0.15s'
+                     }}
+                   >
+                     {fmt}
+                   </button>
+                 )
+              })}
+            </div>
+
           </div>
 
-          {activeTab === 'ITF' && <TemplateEditor key="ITF" ruleset="ITF" fallbackClasses={ITF_WEIGHT_CLASSES} />}
-          {activeTab === 'WT' && <TemplateEditor key="WT" ruleset="WT" fallbackClasses={WT_WEIGHT_CLASSES} />}
+          {activeTab === 'ITF' && <TemplateEditor key="ITF" ruleset="ITF" activeFormat={activeFormat} fallbackClasses={ITF_WEIGHT_CLASSES} />}
+          {activeTab === 'WT' && <TemplateEditor key="WT" ruleset="WT" activeFormat={activeFormat} fallbackClasses={WT_WEIGHT_CLASSES} />}
         </main>
       </div>
     </div>

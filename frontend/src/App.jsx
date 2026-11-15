@@ -12,9 +12,7 @@ import Register from './pages/auth/Register'
 import EventPicker from './pages/tm/EventPicker'
 import EventHome from './pages/tm/EventHome'
 import CompetitorList from './pages/tm/CompetitorList'
-import AddCompetitor from './pages/tm/AddCompetitor'
 import EditCompetitor from './pages/tm/EditCompetitor'
-import BulkUpload from './pages/tm/BulkUpload'
 import TeamList from './pages/tm/TeamList'
 import TeamBuilder from './pages/tm/TeamBuilder'
 import FeesPayment from './pages/tm/FeesPayment'
@@ -23,7 +21,8 @@ import OverallPayments from './pages/tm/OverallPayments'
 import CategorySparring from './pages/tm/CategorySparring'
 import CategoryPattern from './pages/tm/CategoryPattern'
 import EditTeam from './pages/tm/EditTeam'
-
+import MasterRoster from './pages/tm/MasterRoster'
+import EventRegistration from './pages/tm/EventRegistration'
 // Admin pages
 import AdminEventList from './pages/admin/AdminEventList'
 import CreateEvent from './pages/admin/CreateEvent'
@@ -53,9 +52,11 @@ export default function App() {
             {/* TM routes */}
             <Route path="/events" element={<ProtectedRoute requiredRole="TM"><EventPicker /></ProtectedRoute>} />
             <Route path="/events/:id" element={<ProtectedRoute requiredRole="TM"><EventHome /></ProtectedRoute>} />
+            
+            {/* --- Registration Route --- */}
+            <Route path="/events/:id/register" element={<ProtectedRoute requiredRole="TM"><EventRegistration /></ProtectedRoute>} />
+            
             <Route path="/events/:id/competitors" element={<ProtectedRoute requiredRole="TM"><CompetitorList /></ProtectedRoute>} />
-            <Route path="/events/:id/competitors/upload" element={<ProtectedRoute requiredRole="TM"><BulkUpload /></ProtectedRoute>} />
-            <Route path="/events/:id/competitors/add" element={<ProtectedRoute requiredRole="TM"><AddCompetitor /></ProtectedRoute>} />
             <Route path="/events/:id/competitors/:cid/edit" element={<ProtectedRoute requiredRole="TM"><EditCompetitor /></ProtectedRoute>} />
             <Route path="/events/:id/teams" element={<ProtectedRoute requiredRole="TM"><TeamList /></ProtectedRoute>} />
             <Route path="/events/:id/teams/new" element={<ProtectedRoute requiredRole="TM"><TeamBuilder /></ProtectedRoute>} />
@@ -67,6 +68,11 @@ export default function App() {
             <Route path="/events/:id/kyorugi" element={<ProtectedRoute requiredRole="TM"><CategorySparring /></ProtectedRoute>} /> 
             <Route path="/events/:id/pattern" element={<ProtectedRoute requiredRole="TM"><CategoryPattern /></ProtectedRoute>} />
             <Route path="/events/:id/poomsae" element={<ProtectedRoute requiredRole="TM"><CategoryPattern /></ProtectedRoute>} />
+            
+            {/* TM routes (Global / Club Management) */}
+            <Route path="/tm/roster" element={<ProtectedRoute requiredRole="TM"><MasterRoster /></ProtectedRoute>} />
+            
+            
 
             {/* Admin routes */}
             <Route path="/admin" element={<ProtectedRoute requiredRole="ADMIN"><AdminEventList /></ProtectedRoute>} />

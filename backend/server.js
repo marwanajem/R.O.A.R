@@ -8,7 +8,7 @@ import competitorRoutes from './routes/competitors.js';
 import teamRoutes from './routes/teams.js';
 import weightTemplateRoutes from './routes/weightTemplates.js';
 import patternTemplateRoutes from './routes/patternTemplates.js';
-
+import athleteRoutes from './routes/athletes.js';
 
 dotenv.config();
 
@@ -47,6 +47,7 @@ app.use('/api/competitors', competitorRoutes);
 app.use('/api/teams', teamRoutes);
 app.use('/api/weight-templates', weightTemplateRoutes);
 app.use('/api/pattern-templates', patternTemplateRoutes);
+app.use('/api/athletes', athleteRoutes);
 
 // test route
 app.get('/api/status', (req, res) => {

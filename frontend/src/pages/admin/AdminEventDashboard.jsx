@@ -19,7 +19,6 @@ function StatCard({ label, value, sub, accent }) {
   )
 }
 
-
 export default function AdminEventDashboard() {
   const { id } = useParams() 
   const navigate = useNavigate() 
@@ -56,10 +55,18 @@ export default function AdminEventDashboard() {
     if (dbEventId) fetchDashboardData()
   }, [dbEventId])
 
-  // --- Custom Modal Handlers ---
+  // --- UPDATED: Smart Toggle Logic ---
   const handleToggleClick = () => {
     if (!event) return;
-    setPendingStatusChange(event.status === 'CLOSED' ? 'OPEN' : 'CLOSED');
+    
+    // If it's Closed or Published/Upcoming, the next logical step is to OPEN it.
+    // If it's currently Open, the next step is to CLOSE it.
+    let nextStatus = 'CLOSED';
+    if (event.status === 'CLOSED' || event.status === 'PUBLISHED' || event.status === 'UPCOMING') {
+      nextStatus = 'OPEN';
+    }
+    
+    setPendingStatusChange(nextStatus);
     setShowConfirmModal(true);
   }
 
@@ -135,6 +142,18 @@ export default function AdminEventDashboard() {
     .map(([cat, count]) => ({ cat, count, flag: count >= 4 ? 'ok' : count >= 2 ? 'warn' : 'stamp' }))
     .sort((a, b) => a.count - b.count)
 
+  // --- UPDATED: Dynamic Status Display Styles ---
+  let statusText = 'UPCOMING (NOT OPEN)';
+  let statusColors = { bg: 'rgba(255, 193, 7, 0.1)', text: '#FFC107', border: 'rgba(255, 193, 7, 0.3)' };
+
+  if (event?.status === 'OPEN') {
+    statusText = 'REGISTRATION OPEN';
+    statusColors = { bg: 'rgba(76, 175, 80, 0.1)', text: '#4CAF50', border: 'rgba(76, 175, 80, 0.3)' };
+  } else if (event?.status === 'CLOSED') {
+    statusText = 'REGISTRATION CLOSED';
+    statusColors = { bg: 'rgba(255, 75, 75, 0.1)', text: '#FF4B4B', border: 'rgba(255, 75, 75, 0.3)' };
+  }
+
   return (
     <div className="wf">
       <TopBar breadcrumbs={[{ label: 'Admin', to: '/admin' }, { label: event.shortName }]} />
@@ -148,24 +167,26 @@ export default function AdminEventDashboard() {
             right={
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                 
+                {/* Dynamically styled status indicator */}
                 <div style={{ 
                   padding: '0.4rem 0.75rem', 
                   borderRadius: '4px', 
                   fontSize: '0.75rem', 
                   fontWeight: 'bold',
                   fontFamily: 'JetBrains Mono, monospace',
-                  backgroundColor: event?.status === 'CLOSED' ? 'rgba(255, 75, 75, 0.1)' : 'rgba(76, 175, 80, 0.1)',
-                  color: event?.status === 'CLOSED' ? '#FF4B4B' : '#4CAF50',
-                  border: `1px solid ${event?.status === 'CLOSED' ? 'rgba(255, 75, 75, 0.3)' : 'rgba(76, 175, 80, 0.3)'}`
+                  backgroundColor: statusColors.bg,
+                  color: statusColors.text,
+                  border: `1px solid ${statusColors.border}`
                 }}>
-                  {event?.status === 'CLOSED' ? 'REGISTRATION CLOSED' : 'REGISTRATION OPEN'}
+                  {statusText}
                 </div>
 
+                {/* Smart Button */}
                 <Btn 
-                  variant={event?.status === 'CLOSED' ? 'primary' : 'warn'} 
+                  variant={event?.status === 'OPEN' ? 'warn' : 'primary'} 
                   onClick={handleToggleClick}
                 >
-                  {event?.status === 'CLOSED' ? 'Reopen Event' : 'Lock Event'}
+                  {event?.status === 'OPEN' ? 'Lock Event' : 'Open Registration'}
                 </Btn>
 
                 <div style={{ width: '1px', height: '24px', background: 'var(--line)', margin: '0 0.25rem' }}></div>
@@ -269,12 +290,12 @@ export default function AdminEventDashboard() {
           <div className="box" style={{ width: '100%', maxWidth: '400px', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
             <div>
               <h3 style={{ margin: '0 0 0.5rem 0', color: 'var(--ink)' }}>
-                {pendingStatusChange === 'CLOSED' ? 'Lock Registration?' : 'Reopen Registration?'}
+                {pendingStatusChange === 'CLOSED' ? 'Lock Registration?' : 'Open Registration?'}
               </h3>
               <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--muted)', lineHeight: '1.5' }}>
                 {pendingStatusChange === 'CLOSED' 
                   ? 'Are you sure you want to CLOSE registration? Team Managers will no longer be able to add, edit, or remove fighters.' 
-                  : 'Are you sure you want to REOPEN registration? Team Managers will be able to modify their rosters again.'}
+                  : 'Are you sure you want to OPEN registration? Team Managers will immediately be able to upload their rosters.'}
               </p>
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>

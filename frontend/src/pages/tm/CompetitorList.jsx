@@ -1,4 +1,4 @@
-import React, { useState,useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
 import TopBar from '../../components/ui/TopBar'
 import ScopeBar from '../../components/ui/ScopeBar'
@@ -33,10 +33,14 @@ export default function CompetitorList() {
         }
 
         if (user?.clubCode) {
-          const rosterRes = await fetch(`/api/competitors/event/${id}/club/${user.clubCode}`)
+          // --- UPDATED ENDPOINT TO MATCH NEW CART/ROSTER ARCHITECTURE ---
+          const rosterRes = await fetch(`/api/events/${id}/competitors`)
           if (rosterRes.ok) {
-            const rosterData = await rosterRes.json()
-            const formattedRoster = rosterData.map(c => ({
+            const allRoster = await rosterRes.json()
+            // Filter to show only the TM's own club and exclude active cart items
+            const myRoster = allRoster.filter(c => c.clubCode === user.clubCode && c.status !== 'cart')
+            
+            const formattedRoster = myRoster.map(c => ({
               ...c,
               weightClass: c.weightCategory, 
             }))
@@ -78,7 +82,7 @@ export default function CompetitorList() {
 
   if (loading) return <div className="wf"><TopBar /><div className="wf-main" style={{ padding: '2rem' }}><p style={{ color: 'var(--muted)' }}>Loading roster...</p></div></div>
 
-  const isClosed = event?.status === 'CLOSED';
+  const isClosed = event?.status === 'CLOSED' || event?.status === 'ARCHIVED';
 
   return (
     <div className="wf">
@@ -86,20 +90,18 @@ export default function CompetitorList() {
       <ScopeBar event={event} switchTo="/events" />
       <div className="wf-body">
         
-        {/* CORRECTED SIDENAV */}
         {event && <SideNav sections={tmNavSections(id, event.type)} />}
         
         <main className="wf-main">
           <PageHead
-            title="Competitors"
+            title="Registered Competitors"
             sub={`${filtered.length} of ${list.length} shown`}
             right={
               <div style={{ display: 'flex', gap: '0.5rem' }}>
                 {!isClosed && (
-                  <>
-                    <Btn variant="ghost" to={`/events/${id}/competitors/upload`}>Upload CSV</Btn>
-                    <Btn variant="primary" to={`/events/${id}/competitors/add`}>+ Add Competitor</Btn>
-                  </>
+                  <Btn variant="primary" to={`/events/${id}/register`}>
+                    + Register from Master Roster
+                  </Btn>
                 )}
               </div>
             }
@@ -124,7 +126,7 @@ export default function CompetitorList() {
                   <th>Age Cat.</th>
                   <th>Belt Group</th>
                   <th>Wt (kg)</th>
-                  <th>Weight Class</th>
+                  <th>Category / Class</th>
                   <th>Pattern</th>
                   <th>Status</th>
                   {!isClosed && <th></th>}
@@ -142,8 +144,8 @@ export default function CompetitorList() {
                     <td><Chip variant="default">{c.ageCategory}</Chip></td>
                     <td><Chip variant="gold">{c.beltGroup}</Chip></td>
                     <td className="mono">{c.weightKg}</td>
-                    <td style={{ fontSize: '0.75rem', color: 'var(--ink-2)' }}>{c.weightClass}</td>
-                    <td><Chip variant={c.patternFormat === 'Carnival' ? 'warn' : 'ghost'}>{c.patternFormat}</Chip></td>
+                    <td style={{ fontSize: '0.75rem', color: 'var(--ink-2)' }}>{c.weightClass || c.patternFormat}</td>
+                    <td><Chip variant={c.patternFormat === 'Carnival' ? 'warn' : 'ghost'}>{c.patternFormat || '—'}</Chip></td>
                     <td><Stamp variant={c.status === 'confirmed' ? 'ok' : 'gold'}>{c.status}</Stamp></td>
                     
                     {!isClosed && (
@@ -167,7 +169,7 @@ export default function CompetitorList() {
                 {filtered.length === 0 && (
                   <tr>
                     <td colSpan={isClosed ? 12 : 13} style={{ textAlign: 'center', padding: '2rem', color: 'var(--muted)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.75rem' }}>
-                      No competitors match the current filters.
+                      No registered competitors match the current filters.
                     </td>
                   </tr>
                 )}
