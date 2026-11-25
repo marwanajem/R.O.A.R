@@ -10,13 +10,130 @@ const router = express.Router();
 // Helper to safely parse JSON without crashing on nulls or already-parsed objects
 const safeParseJSON = (data, fallback) => {
   if (!data) return fallback;
-  if (typeof data === 'object') return data; 
+  if (typeof data === 'object') return data;
   try {
     return JSON.parse(data);
   } catch (error) {
     return fallback;
   }
 };
+
+const deriveBeltGroup = (beltGrade) => {
+  if (!beltGrade) return 'Color Belt';
+  const lower = beltGrade.toLowerCase();
+  if (lower.includes('dan') || (lower.includes('black') && !lower.includes('kup') && !lower.includes('red'))) {
+    return 'Black Belt';
+  }
+  return 'Color Belt';
+};
+
+const deriveAgeCategory = (dob) => {
+  if (!dob) return 'Open';
+  const birthYear = new Date(dob).getFullYear();
+  if (Number.isNaN(birthYear)) return 'Open';
+  const age = new Date().getFullYear() - birthYear;
+  if (age < 12) return 'U12';
+  if (age <= 14) return '12-14';
+  if (age <= 17) return '15-17';
+  return '18+';
+};
+
+const inferFormat = (c) => {
+  if (c.format) return c.format;
+  const lbl = (c.label || '').toLowerCase();
+  if (lbl.includes('pair')) return 'Pair';
+  if (lbl.includes('team')) return 'Team';
+  return 'Individual';
+};
+
+// Shared registration helper (used by both /:id/register and /:id/cart)
+async function registerAthleteToEvent({ eventId, athleteId, categoryType, categoryLabel, status }) {
+  const [athletes] = await pool.query('SELECT * FROM athletes WHERE id = ?', [athleteId]);
+  if (athletes.length === 0) {
+    return { code: 404, body: { error: 'Athlete not found in Master Roster' } };
+  }
+  const a = athletes[0];
+
+  // Prevent registering the exact same category twice
+  const [duplicate] = await pool.query(
+    'SELECT id FROM competitors WHERE eventId = ? AND athleteId = ? AND (weightCategory = ? OR patternFormat = ?)',
+    [eventId, athleteId, categoryLabel, categoryLabel]
+  );
+  if (duplicate.length > 0) {
+    return { code: 400, body: { error: 'Athlete is already registered in this category.' } };
+  }
+
+  // Pull ageGroup from event_categories if configured, else derive from DOB
+  const [catRows] = await pool.query(
+    'SELECT ageGroup FROM event_categories WHERE eventId = ? AND label = ? LIMIT 1',
+    [eventId, categoryLabel]
+  );
+  const ageCategory = catRows[0]?.ageGroup || deriveAgeCategory(a.dob);
+  const beltGroup = deriveBeltGroup(a.beltGrade);
+
+  // If the athlete already has a row for this event with the target discipline empty, merge into it
+  const [existingRow] = await pool.query(
+    'SELECT id, weightCategory, patternFormat, ageCategory, beltGroup, status FROM competitors WHERE eventId = ? AND athleteId = ? LIMIT 1',
+    [eventId, athleteId]
+  );
+
+  if (existingRow.length > 0) {
+    const row = existingRow[0];
+    const nextStatus = row.status === 'confirmed' || status === 'confirmed' ? 'confirmed' : 'cart';
+    const canMergeSparring = categoryType === 'sparring' && !row.weightCategory;
+    const canMergePattern = categoryType === 'pattern' && !row.patternFormat;
+
+    if (canMergeSparring) {
+      await pool.query(
+        `UPDATE competitors
+         SET isSparring = 1, weightCategory = ?,
+             ageCategory = COALESCE(NULLIF(ageCategory, ''), ?),
+             beltGroup = COALESCE(NULLIF(beltGroup, ''), ?),
+             status = ?
+         WHERE id = ?`,
+        [categoryLabel, ageCategory, beltGroup, nextStatus, row.id]
+      );
+      return { code: 201, body: { success: true, message: 'Sparring category added to existing registration!' } };
+    }
+
+    if (canMergePattern) {
+      await pool.query(
+        `UPDATE competitors
+         SET isPattern = 1, patternFormat = ?,
+             ageCategory = COALESCE(NULLIF(ageCategory, ''), ?),
+             beltGroup = COALESCE(NULLIF(beltGroup, ''), ?),
+             status = ?
+         WHERE id = ?`,
+        [categoryLabel, ageCategory, beltGroup, nextStatus, row.id]
+      );
+      return { code: 201, body: { success: true, message: 'Pattern category added to existing registration!' } };
+    }
+  }
+
+  const icMasked = a.icNumber?.length === 12
+    ? `${a.icNumber.substring(0, 6)}-**-****`
+    : `${(a.icNumber || '').substring(0, 4)}****`;
+
+  const weightCat = categoryType === 'sparring' ? categoryLabel : null;
+  const patternCat = categoryType === 'pattern' ? categoryLabel : null;
+  const isSparringBit = categoryType === 'sparring' ? 1 : 0;
+  const isPatternBit = categoryType === 'pattern' ? 1 : 0;
+
+  await pool.query(
+    `INSERT INTO competitors (
+      eventId, athleteId, clubCode, fullName, icMasked, gender, dob,
+      beltGrade, ageCategory, beltGroup, weightKg,
+      isSparring, isPattern, weightCategory, patternFormat, status
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      eventId, athleteId, a.clubCode, a.fullName, icMasked, a.gender, a.dob,
+      a.beltGrade, ageCategory, beltGroup, a.weightKg,
+      isSparringBit, isPatternBit, weightCat, patternCat, status
+    ]
+  );
+
+  return { code: 201, body: { success: true, message: 'Athlete registered successfully!' } };
+}
 
 // Create the uploads directory if it doesn't exist
 const uploadDir = 'uploads/payments';
@@ -35,7 +152,7 @@ const storage = multer.diskStorage({
   }
 });
 
-const upload = multer({ 
+const upload = multer({
   storage: storage,
   limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
 });
@@ -45,7 +162,7 @@ const upload = multer({
 // ==========================================
 router.get('/', async (req, res) => {
   try {
-    const fetchAll = req.query.all === 'true'; 
+    const fetchAll = req.query.all === 'true';
 
     let query = `
       SELECT 
@@ -63,7 +180,7 @@ router.get('/', async (req, res) => {
     query += ' ORDER BY e.created_at ASC';
 
     const [events] = await pool.query(query);
-    
+
     const formattedEvents = events.map(ev => ({
       ...ev,
       categories: safeParseJSON(ev.categories, []),
@@ -100,32 +217,32 @@ router.get('/:id', async (req, res) => {
     }
 
     const ev = events[0];
-    
+
     ev.categories = safeParseJSON(ev.categories, []);
     ev.categoryFees = safeParseJSON(ev.categoryFees, {});
 
     const indivTotal = ev.categories.reduce((sum, cat) => {
-       if (!cat.toLowerCase().includes('team') && !cat.toLowerCase().includes('pair')) {
-           return sum + ((ev.billableCompetitorCount || 0) * parseFloat(ev.categoryFees[cat] || 0));
-       }
-       return sum;
+      if (!cat.toLowerCase().includes('team') && !cat.toLowerCase().includes('pair')) {
+        return sum + ((ev.billableCompetitorCount || 0) * parseFloat(ev.categoryFees[cat] || 0));
+      }
+      return sum;
     }, 0);
 
     const teamTotal = ev.categories.reduce((sum, cat) => {
-       if (cat.toLowerCase().includes('team') || cat.toLowerCase().includes('pair')) {
-           return sum + ((ev.teamCount || 0) * parseFloat(ev.categoryFees[cat] || 0)); 
-       }
-       return sum;
+      if (cat.toLowerCase().includes('team') || cat.toLowerCase().includes('pair')) {
+        return sum + ((ev.teamCount || 0) * parseFloat(ev.categoryFees[cat] || 0));
+      }
+      return sum;
     }, 0);
-    
+
     const formattedEvent = {
       ...ev,
       stats: {
         competitors: ev.totalRosterCount || 0,
         clubs: ev.clubCount || 0,
-        teams: ev.teamCount || 0, 
-        feesCollected: parseFloat(ev.totalCollected || 0), 
-        feesTotal: indivTotal + teamTotal 
+        teams: ev.teamCount || 0,
+        feesCollected: parseFloat(ev.totalCollected || 0),
+        feesTotal: indivTotal + teamTotal
       }
     };
 
@@ -153,13 +270,13 @@ router.post('/', async (req, res) => {
       VALUES 
         (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
-      data.name,           
-      data.venue,          
-      data.ruleset,        
-      data.eventDate,      
-      data.eventDateEnd || null, 
-      data.regEnd, 
-      data.regStart || new Date(),       
+      data.name,
+      data.venue,
+      data.ruleset,
+      data.eventDate,
+      data.eventDateEnd || null,
+      data.regEnd,
+      data.regStart || new Date(),
       data.status || 'DRAFT',
       data.beltGrouping || 'all',
       data.maxCompetitors || null,
@@ -169,13 +286,13 @@ router.post('/', async (req, res) => {
       data.paymentRef || null,
       data.ageRule || 'year_of_birth',
       JSON.stringify(data.categories || []),
-      JSON.stringify(data.fees || {}) 
+      JSON.stringify(data.fees || {})
     ]);
 
-    res.status(201).json({ 
-      success: true, 
-      eventId: result.insertId, 
-      message: 'Event created successfully!' 
+    res.status(201).json({
+      success: true,
+      eventId: result.insertId,
+      message: 'Event created successfully!'
     });
   } catch (error) {
     console.error('Error creating event:', error);
@@ -199,13 +316,13 @@ router.put('/:id', async (req, res) => {
         paymentRefFormat = ?, ageRule = ?, categories = ?, categoryFees = ?
       WHERE id = ?
     `, [
-      data.name,           
-      data.venue,          
-      data.ruleset,        
-      data.eventDate,      
-      data.eventDateEnd || null, 
-      data.regEnd,         
-      data.status,         
+      data.name,
+      data.venue,
+      data.ruleset,
+      data.eventDate,
+      data.eventDateEnd || null,
+      data.regEnd,
+      data.status,
       data.beltGrouping || 'all',
       data.maxCompetitors || null,
       data.bankName || null,
@@ -233,7 +350,7 @@ router.put('/:id', async (req, res) => {
 // 5. DELETE EVENT (HARD DELETE FOR DRAFTS)
 // ==========================================
 router.delete('/:id', async (req, res) => {
-  const connection = await pool.getConnection(); 
+  const connection = await pool.getConnection();
   try {
     const eventId = req.params.id;
     await connection.beginTransaction();
@@ -263,39 +380,33 @@ router.delete('/:id', async (req, res) => {
 });
 
 // ==========================================
-// 6. SMART CART: ADD TO EVENT
+// 6. SMART REGISTRATION (Cart & Instant)
 // ==========================================
 router.post('/:id/cart', async (req, res) => {
   try {
-    const eventId = req.params.id;
-    const { athleteId, categoryType, categoryLabel } = req.body;
-
-    const [athletes] = await pool.query('SELECT * FROM athletes WHERE id = ?', [athleteId]);
-    if (athletes.length === 0) return res.status(404).json({ error: 'Athlete not found in Master Roster' });
-    const a = athletes[0];
-
-    const [existing] = await pool.query(
-       'SELECT id FROM competitors WHERE eventId = ? AND athleteId = ? AND (weightCategory = ? OR patternFormat = ?)',
-       [eventId, athleteId, categoryLabel, categoryLabel]
-    );
-    if (existing.length > 0) return res.status(400).json({ error: 'Athlete is already drafted in this category.' });
-
-    const icMasked = a.icNumber.length === 12 ? `${a.icNumber.substring(0,6)}-**-****` : a.icNumber.substring(0,4) + '****';
-    const weightCat = categoryType === 'sparring' ? categoryLabel : null;
-    const patternCat = categoryType === 'pattern' ? categoryLabel : null;
-    
-    const isSparringBit = categoryType === 'sparring' ? 1 : 0;
-    const isPatternBit = categoryType === 'pattern' ? 1 : 0;
-
-    await pool.query(`
-      INSERT INTO competitors (eventId, athleteId, clubCode, fullName, icMasked, gender, dob, beltGrade, weightKg, isSparring, isPattern, weightCategory, patternFormat, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'cart')
-    `, [eventId, athleteId, a.clubCode, a.fullName, icMasked, a.gender, a.dob, a.beltGrade, a.weightKg, isSparringBit, isPatternBit, weightCat, patternCat]);
-
-    res.status(201).json({ success: true, message: 'Athlete drafted to Event Cart!' });
-  } catch (error) { 
+    const result = await registerAthleteToEvent({
+      eventId: req.params.id,
+      ...req.body,
+      status: 'cart'
+    });
+    res.status(result.code).json(result.body);
+  } catch (error) {
     console.error('Cart Error:', error);
-    res.status(500).json({ error: 'Failed to add athlete to cart' }); 
+    res.status(500).json({ error: 'Failed to add athlete to cart' });
+  }
+});
+
+router.post('/:id/register', async (req, res) => {
+  try {
+    const result = await registerAthleteToEvent({
+      eventId: req.params.id,
+      ...req.body,
+      status: 'confirmed'
+    });
+    res.status(result.code).json(result.body);
+  } catch (error) {
+    console.error('Registration Error:', error);
+    res.status(500).json({ error: 'Failed to register athlete' });
   }
 });
 
@@ -315,9 +426,9 @@ router.post('/:id/special-requests', async (req, res) => {
     `, [eventId, clubCode, athleteId, discipline, requestNote]);
 
     res.status(201).json({ success: true, message: 'Special request submitted successfully.' });
-  } catch (error) { 
+  } catch (error) {
     console.error('Request Error:', error);
-    res.status(500).json({ error: 'Failed to submit request' }); 
+    res.status(500).json({ error: 'Failed to submit request' });
   }
 });
 
@@ -336,21 +447,16 @@ router.post('/:id/checkout-cash', async (req, res) => {
 
     await connection.beginTransaction();
 
-    const [payResult] = await connection.query(`
+    await connection.query(`
       INSERT INTO payments (event_id, user_id, amount, reference_code, proof_url, status) 
-      VALUES (?, ?, ?, 'PAY-ON-DAY', NULL, 'cash_pending')
+      VALUES (?, ?, ?, 'PAY-ON-DAY', NULL, 'pending')
     `, [eventId, userId, amount || 0]);
 
-    // INSTANT CONFIRMATION: Transition 'cart' directly to 'confirmed'
-    const [updateResult] = await connection.query(`
+    // Transition any remaining 'cart' entries to 'confirmed' (safe even if already confirmed via /register)
+    await connection.query(`
       UPDATE competitors SET status = 'confirmed' 
       WHERE eventId = ? AND clubCode = ? AND status = 'cart'
     `, [eventId, clubCode]);
-
-    if (updateResult.affectedRows === 0) {
-      await connection.rollback();
-      return res.status(400).json({ error: 'Your cart is empty. Please draft athletes first.' });
-    }
 
     await connection.commit();
     res.status(200).json({ success: true, message: 'Registration confirmed! Please pay cash on event day.' });
@@ -358,8 +464,8 @@ router.post('/:id/checkout-cash', async (req, res) => {
     await connection.rollback();
     console.error('Error processing cash checkout:', error);
     res.status(500).json({ error: 'Failed to process checkout.' });
-  } finally { 
-    connection.release(); 
+  } finally {
+    connection.release();
   }
 });
 
@@ -374,7 +480,7 @@ router.get('/:id/competitors', async (req, res) => {
       SELECT 
         c.id, c.athleteId, c.fullName, c.clubCode, u.clubName, c.icMasked, 
         DATE_FORMAT(c.dob, '%Y-%m-%d') AS dob, c.gender, c.beltGrade, c.ageCategory, 
-        c.beltGroup, c.weightKg, c.weightCategory AS weightClass, c.patternFormat, 
+        c.beltGroup, c.weightKg, c.weightCategory, c.weightCategory AS weightClass, c.patternFormat, 
         c.isSparring, c.isPattern, c.status 
       FROM competitors c
       LEFT JOIN users u ON c.clubCode = u.clubCode
@@ -398,7 +504,7 @@ router.patch('/:id/competitors/bulk-update', async (req, res) => {
     if (updates.beltGroup) { setClauses.push('beltGroup = ?'); values.push(updates.beltGroup); }
 
     if (setClauses.length === 0) return res.status(400).json({ error: 'No updates provided' });
-    
+
     const query = `UPDATE competitors SET ${setClauses.join(', ')} WHERE eventId = ? AND id IN (?)`;
     values.push(eventId, competitorIds);
 
@@ -427,20 +533,27 @@ router.get('/:id/categories', async (req, res) => {
 });
 
 router.patch('/:id/categories', async (req, res) => {
-  const connection = await pool.getConnection(); 
+  const connection = await pool.getConnection();
   try {
     const eventId = req.params.id;
     const { classes } = req.body;
     await connection.beginTransaction();
     await connection.query('DELETE FROM event_categories WHERE eventId = ?', [eventId]);
     if (classes && classes.length > 0) {
-      const insertValues = classes.map(c => [eventId, c.id, c.type || 'sparring', c.label, c.gender, c.ageGroup, c.overrideMin, c.overrideMax, c.enabled ? 1 : 0]);
-      await connection.query(`INSERT INTO event_categories (eventId, categoryId, type, label, gender, ageGroup, overrideMin, overrideMax, isEnabled) VALUES ?`, [insertValues]);
+      const insertValues = classes.map(c => [
+        eventId, c.id, c.type || 'sparring', inferFormat(c),
+        c.label, c.gender, c.ageGroup, c.overrideMin, c.overrideMax, c.enabled ? 1 : 0
+      ]);
+      await connection.query(
+        `INSERT INTO event_categories (eventId, categoryId, type, format, label, gender, ageGroup, overrideMin, overrideMax, isEnabled) VALUES ?`,
+        [insertValues]
+      );
     }
     await connection.commit();
     res.json({ success: true, message: 'Categories updated successfully' });
   } catch (error) {
     await connection.rollback();
+    console.error('Error saving categories:', error);
     res.status(500).json({ error: 'Failed to save categories' });
   } finally { connection.release(); }
 });
@@ -473,32 +586,38 @@ router.post('/:id/payments', upload.single('proofFile'), async (req, res) => {
     const { amount, userId, user_id, referenceCode, reference_code } = req.body;
     const uid = userId || user_id;
     const ref = referenceCode || reference_code;
-    
+
     if (!req.file) return res.status(400).json({ error: 'Receipt image is required' });
     if (!uid) return res.status(400).json({ error: 'User ID is missing from the submission' });
 
     const proof_url = `/uploads/payments/${req.file.filename}`;
-    const [result] = await pool.query(`INSERT INTO payments (event_id, user_id, amount, reference_code, proof_url, status) VALUES (?, ?, ?, ?, ?, 'pending')`, [eventId, uid, amount, ref, proof_url]);
-    
+    const [result] = await pool.query(
+      `INSERT INTO payments (event_id, user_id, amount, reference_code, proof_url, status) VALUES (?, ?, ?, ?, ?, 'pending')`,
+      [eventId, uid, amount, ref, proof_url]
+    );
+
     // INSTANT CONFIRMATION: Transition 'cart' directly to 'confirmed'
-    await pool.query(`UPDATE competitors SET status = 'confirmed' WHERE eventId = ? AND clubCode = (SELECT clubCode FROM users WHERE id = ?) AND status = 'cart'`, [eventId, uid]);
-    
+    await pool.query(
+      `UPDATE competitors SET status = 'confirmed' WHERE eventId = ? AND clubCode = (SELECT clubCode FROM users WHERE id = ?) AND status = 'cart'`,
+      [eventId, uid]
+    );
+
     res.status(201).json({ success: true, paymentId: result.insertId, message: 'Registration confirmed! Payment is pending admin verification.' });
   } catch (error) { res.status(500).json({ error: 'Failed to submit payment' }); }
 });
 
 router.patch('/:eventId/payments/:paymentId', async (req, res) => {
-  const connection = await pool.getConnection(); 
+  const connection = await pool.getConnection();
   try {
-    const { status } = req.body; 
+    const { status } = req.body;
     const eventId = req.params.eventId;
     const rawPaymentId = parseInt(req.params.paymentId.replace('PAY-', ''), 10);
-    
+
     await connection.beginTransaction();
 
     // Only update the financial ledger. Do not touch the competitors table.
     const [payResult] = await connection.query('UPDATE payments SET status = ? WHERE id = ? AND event_id = ?', [status, rawPaymentId, eventId]);
-    
+
     if (payResult.affectedRows === 0) {
       await connection.rollback();
       return res.status(404).json({ error: 'Payment not found' });
@@ -509,15 +628,15 @@ router.patch('/:eventId/payments/:paymentId', async (req, res) => {
   } catch (error) {
     await connection.rollback();
     res.status(500).json({ error: 'Failed to process payment verification' });
-  } finally { 
-    connection.release(); 
+  } finally {
+    connection.release();
   }
 });
 
 router.patch('/:id/status', async (req, res) => {
   try {
     const eventId = req.params.id;
-    const { status } = req.body; 
+    const { status } = req.body;
     const [result] = await pool.query('UPDATE events SET status = ? WHERE id = ?', [status, eventId]);
     if (result.affectedRows === 0) return res.status(404).json({ error: 'Event not found' });
     res.json({ success: true, message: `Event is now ${status}` });
@@ -538,7 +657,7 @@ router.get('/:id/template', async (req, res) => {
     let [patternCategories] = await pool.query('SELECT label FROM event_categories WHERE eventId = ? AND isEnabled = 1 AND type = "pattern"', [eventId]);
     if (patternCategories.length === 0) [patternCategories] = await pool.query('SELECT label FROM pattern_templates WHERE ruleset = ? AND eventType = "individual"', [event.type]);
     const patternLabels = patternCategories.map(p => p.label);
-    
+
     const beltLabels = [
       '10th Kup (White)', '9th Kup (White-Yellow)', '8th Kup (Yellow)', '7th Kup (Yellow-Green)',
       '6th Kup (Green)', '5th Kup (Green-Blue)', '4th Kup (Blue)', '3rd Kup (Blue-Red)',
@@ -582,66 +701,6 @@ router.get('/:id/template', async (req, res) => {
     await workbook.xlsx.write(res);
     res.end();
   } catch (error) { res.status(500).json({ error: 'Failed to generate template' }); }
-});
-
-// ==========================================
-// NEW: INSTANT REGISTRATION 
-// ==========================================
-router.post('/:id/register', async (req, res) => {
-  try {
-    const eventId = req.params.id;
-    const { athleteId, categoryType, categoryLabel } = req.body;
-
-    const [athletes] = await pool.query('SELECT * FROM athletes WHERE id = ?', [athleteId]);
-    if (athletes.length === 0) return res.status(404).json({ error: 'Athlete not found in Master Roster' });
-    const a = athletes[0];
-
-    const [existing] = await pool.query(
-       'SELECT id FROM competitors WHERE eventId = ? AND athleteId = ? AND (weightCategory = ? OR patternFormat = ?)',
-       [eventId, athleteId, categoryLabel, categoryLabel]
-    );
-    if (existing.length > 0) return res.status(400).json({ error: 'Athlete is already registered in this category.' });
-
-    const icMasked = a.icNumber.length === 12 ? `${a.icNumber.substring(0,6)}-**-****` : a.icNumber.substring(0,4) + '****';
-    const weightCat = categoryType === 'sparring' ? categoryLabel : null;
-    const patternCat = categoryType === 'pattern' ? categoryLabel : null;
-    
-    const isSparringBit = categoryType === 'sparring' ? 1 : 0;
-    const isPatternBit = categoryType === 'pattern' ? 1 : 0;
-
-    await pool.query(`
-      INSERT INTO competitors (eventId, athleteId, clubCode, fullName, icMasked, gender, dob, beltGrade, weightKg, isSparring, isPattern, weightCategory, patternFormat, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'confirmed')
-    `, [eventId, athleteId, a.clubCode, a.fullName, icMasked, a.gender, a.dob, a.beltGrade, a.weightKg, isSparringBit, isPatternBit, weightCat, patternCat]);
-
-    res.status(201).json({ success: true, message: 'Athlete registered successfully!' });
-  } catch (error) { 
-    console.error('Registration Error:', error);
-    res.status(500).json({ error: 'Failed to register athlete' }); 
-  }
-});
-
-// ==========================================
-// NEW: CASH CHECKOUT 
-// ==========================================
-router.post('/:id/checkout-cash', async (req, res) => {
-  try {
-    const eventId = req.params.id;
-    const { userId, clubCode, amount } = req.body;
-
-    if (!userId || !clubCode) return res.status(400).json({ error: 'User ID and Club Code are required.' });
-
-    // Note: Verify your payments table uses 'event_id'. Change to 'eventId' if needed!
-    await pool.query(`
-      INSERT INTO payments (event_id, user_id, amount, reference_code, proof_url, status) 
-      VALUES (?, ?, ?, 'PAY-ON-DAY', NULL, 'cash_pending')
-    `, [eventId, userId, amount || 0]);
-
-    res.status(200).json({ success: true, message: 'Cash payment intent recorded successfully.' });
-  } catch (error) { 
-    console.error('Checkout Error:', error);
-    res.status(500).json({ error: 'Failed to process checkout.' }); 
-  }
 });
 
 export default router;

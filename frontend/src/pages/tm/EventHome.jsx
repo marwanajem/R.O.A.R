@@ -195,10 +195,10 @@ export default function EventHome() {
                     <td><Chip variant="default">{c.ageCategory || '-'}</Chip></td>
                     <td>
                       <div style={{ fontSize: '0.65rem', color: 'var(--gold)', fontWeight: 600, textTransform: 'uppercase', marginBottom: '2px' }}>
-                        {c.isSparring ? 'Sparring' : 'Pattern'}
+                        {c.isSparring && c.isPattern ? 'Sparring & Pattern' : c.isSparring ? 'Sparring' : 'Pattern'}
                       </div>
                       <div className="mono" style={{ fontSize: '0.75rem' }}>
-                        {c.weightCategory || c.patternFormat || 'Pending'}
+                        {[c.weightClass || c.weightCategory, c.patternFormat].filter(Boolean).join(' • ') || 'Pending'}
                       </div>
                     </td>
                     <td style={{ textAlign: 'right' }}>

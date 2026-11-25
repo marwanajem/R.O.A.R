@@ -16,7 +16,6 @@ import EditCompetitor from './pages/tm/EditCompetitor'
 import TeamList from './pages/tm/TeamList'
 import TeamBuilder from './pages/tm/TeamBuilder'
 import FeesPayment from './pages/tm/FeesPayment'
-import MasterAthleteList from './pages/tm/MasterAthleteList'
 import OverallPayments from './pages/tm/OverallPayments'
 import CategorySparring from './pages/tm/CategorySparring'
 import CategoryPattern from './pages/tm/CategoryPattern'
@@ -62,7 +61,6 @@ export default function App() {
             <Route path="/events/:id/teams/new" element={<ProtectedRoute requiredRole="TM"><TeamBuilder /></ProtectedRoute>} />
             <Route path="/events/:id/teams/:teamId/edit" element={<ProtectedRoute requiredRole="TM"><EditTeam /></ProtectedRoute>} />
             <Route path="/events/:id/fees" element={<ProtectedRoute requiredRole="TM"><FeesPayment /></ProtectedRoute>} />
-            <Route path="/club/roster" element={<ProtectedRoute requiredRole="TM"><MasterAthleteList /></ProtectedRoute>} />
             <Route path="/club/payments" element={<ProtectedRoute requiredRole="TM"><OverallPayments /></ProtectedRoute>} />
             <Route path="/events/:id/sparring" element={<ProtectedRoute requiredRole="TM"><CategorySparring /></ProtectedRoute>} />
             <Route path="/events/:id/kyorugi" element={<ProtectedRoute requiredRole="TM"><CategorySparring /></ProtectedRoute>} /> 
@@ -88,10 +86,10 @@ export default function App() {
 
             {/* Shared routes */}
             {/* Team Manager profile  */}
-            <Route path="/profile" element={<ProtectedRoute allowedRoles={['team_manager']}><Profile /></ProtectedRoute>} />
+            <Route path="/profile" element={<ProtectedRoute requiredRole="TM"><Profile /></ProtectedRoute>} />
             {/* Admin profile */}
-            <Route path="/admin/profile" element={<ProtectedRoute allowedRoles={['admin']}><Profile /></ProtectedRoute>} />
-
+            <Route path="/admin/profile" element={<ProtectedRoute requiredRole="ADMIN"><Profile /></ProtectedRoute>} />
+            
             {/* Default redirects */}
             <Route path="/" element={<Navigate to="/login" replace />} />
             <Route path="*" element={<NotFound />} />

@@ -22,8 +22,7 @@ export function tmTopNavSections() {
     {
       label: 'Club Management',
       items: [
-        { to: '/tm/roster', label: 'Athlete List' },
-        { to: '/club/roster', label: 'Master Athlete List' },
+        { to: '/tm/roster', label: 'Master Roster' },
         { to: '/club/payments', label: 'Overall Payments' },
       ],
     },

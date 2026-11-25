@@ -6,7 +6,7 @@ import Btn from '../../components/ui/Btn'
 import Chip from '../../components/ui/Chip'
 import Stamp from '../../components/ui/Stamp'
 import { useAuth } from '../../contexts/AuthContext'
-import { tmNavSections } from '../../utils/navSections'
+import { tmTopNavSections } from '../../utils/navSections'
 import { COUNTRIES, getFlag } from '../../utils/countries'
 
 const BELT_GRADES = [
@@ -116,7 +116,7 @@ export default function MasterRoster() {
 
     let newDob = formData.dob
     let newGender = formData.gender
-    if (/^\d{12}$/.test(val)) {
+    if (formData.countryCode === 'MAS' && /^\d{12}$/.test(val)) {
       const yy = parseInt(val.substring(0, 2), 10)
       const mm = val.substring(2, 4)
       const dd = val.substring(4, 6)
@@ -260,7 +260,7 @@ export default function MasterRoster() {
     <div className="wf">
       <TopBar breadcrumbs={[{ label: 'Club Management' }, { label: 'Master Roster' }]} />
       <div className="wf-body">
-        <SideNav sections={tmNavSections(null)} />
+        <SideNav sections={tmTopNavSections()} />
         <main className="wf-main">
           <PageHead
             title="Master Athlete Roster"
@@ -361,6 +361,7 @@ export default function MasterRoster() {
                 )}
                 {paginatedAthletes.map(a => {
                   const bStyle = getBeltStyle(a.beltGrade)
+                  const age = calculateAge(a.dob)
                   return (
                   <tr key={a.id}>
                     <td>
@@ -371,7 +372,7 @@ export default function MasterRoster() {
                     </td>
                     <td className="name">{a.fullName}</td>
                     <td className="mono" style={{ color: 'var(--muted)', fontSize: '0.75rem' }}>{maskIC(a.icNumber)}</td> 
-                    <td className="mono" style={{ color: a.age < MIN_AGE ? '#FF4B4B' : 'var(--gold)' }}>{calculateAge(a.dob)}</td>
+                    <td className="mono" style={{ color: age < MIN_AGE ? '#FF4B4B' : 'var(--gold)' }}>{age}</td>
                     <td className="mono" style={{ color: 'var(--muted)' }}>{a.gender}</td>
                     <td><span style={{ backgroundColor: bStyle.bg, color: bStyle.color, border: bStyle.border || 'none', padding: '2px 6px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 600 }}>{a.beltGrade}</span></td>
                     <td className="mono">{Number(a.weightKg).toFixed(1)} kg</td>

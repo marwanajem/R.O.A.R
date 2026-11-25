@@ -42,7 +42,7 @@ export default function CompetitorList() {
             
             const formattedRoster = myRoster.map(c => ({
               ...c,
-              weightClass: c.weightCategory, 
+              weightClass: c.weightClass || c.weightCategory,
             }))
             setList(formattedRoster)
           }
@@ -144,7 +144,7 @@ export default function CompetitorList() {
                     <td><Chip variant="default">{c.ageCategory}</Chip></td>
                     <td><Chip variant="gold">{c.beltGroup}</Chip></td>
                     <td className="mono">{c.weightKg}</td>
-                    <td style={{ fontSize: '0.75rem', color: 'var(--ink-2)' }}>{c.weightClass || c.patternFormat}</td>
+                    <td style={{ fontSize: '0.75rem', color: 'var(--ink-2)' }}>{c.weightClass || '—'}</td>
                     <td><Chip variant={c.patternFormat === 'Carnival' ? 'warn' : 'ghost'}>{c.patternFormat || '—'}</Chip></td>
                     <td><Stamp variant={c.status === 'confirmed' ? 'ok' : 'gold'}>{c.status}</Stamp></td>
                     

@@ -14,17 +14,23 @@ const router = express.Router();
   ========================================================
 */
 
-// GET: Fetch event-specific competitors for a club (Required for Team Builder!)
+// GET: Fetch event-specific competitors for a club + their existing team formats
 router.get('/event/:eventId/club/:clubCode', async (req, res) => {
   try {
     const { eventId, clubCode } = req.params;
-    
-    // Selects all columns including patternFormat and weightCategory
+
     const [competitors] = await pool.query(
-      `SELECT * FROM competitors WHERE eventId = ? AND clubCode = ?`,
+      `SELECT c.*,
+              c.weightCategory AS weightClass,
+              GROUP_CONCAT(DISTINCT t.type) AS assignedTeamTypes
+       FROM competitors c
+       LEFT JOIN team_members tm ON c.id = tm.competitorId
+       LEFT JOIN teams t ON tm.teamId = t.id AND t.eventId = c.eventId
+       WHERE c.eventId = ? AND c.clubCode = ?
+       GROUP BY c.id`,
       [eventId, clubCode]
     );
-    
+
     res.json(competitors);
   } catch (error) {
     console.error('Error fetching event club competitors:', error);

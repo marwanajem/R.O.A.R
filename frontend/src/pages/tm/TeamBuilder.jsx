@@ -58,30 +58,40 @@ export default function TeamBuilder() {
   const slotsRequired = CATEGORY_SLOTS[category] || 3
 
   const eligible = myCompetitors.filter((c) => {
-    // 1. Discipline Check: 
-    // If they have ANY registered patternFormat or weightCategory, OR their global flag is 1, they are eligible to be grouped.
+    // 1. Exclude athletes already assigned to a team in the currently selected format
+    const assignedTypes = c.assignedTeamTypes
+      ? c.assignedTeamTypes.split(',')
+      : []
+    if (assignedTypes.includes(category)) return false
+
+    // 2. Discipline check (checks both global flag and event-specific category)
     if (category.includes('Sparring') || category.includes('Kyorugi')) {
-        if (c.isSparring === 0 && !c.weightCategory) return false
+      if (c.isSparring === 0 && !c.weightCategory) return false
     }
     if (category.includes('Pattern') || category.includes('Poomsae')) {
-        if (c.isPattern === 0 && !c.patternFormat) return false
+      if (c.isPattern === 0 && !c.patternFormat) return false
     }
 
-    // 2. Calculate age from DOB
-    const age = c.dob ? (new Date().getFullYear() - new Date(c.dob).getFullYear()) : 0;
+    // 3. Calculate age safely from the DATE dob column
+    const parsedDob = c.dob ? new Date(c.dob) : null
+    const age =
+      parsedDob && !Number.isNaN(parsedDob.getTime())
+        ? new Date().getFullYear() - parsedDob.getFullYear()
+        : null
 
-    // 3. Match Filters
-    const matchGender = !filterGender || filterGender === 'Mixed' || c.gender === filterGender
-    
+    // 4. Match Gender & Age Filters
+    const matchGender =
+      !filterGender || filterGender === 'Mixed' || c.gender === filterGender
+
     let matchAge = true
-    if (filterAge === 'U12') matchAge = age < 12
-    if (filterAge === '12-14') matchAge = age >= 12 && age <= 14
-    if (filterAge === '15-17') matchAge = age >= 15 && age <= 17
-    if (filterAge === '18+') matchAge = age >= 18
+    if (filterAge && age === null) matchAge = false
+    else if (filterAge === 'U12') matchAge = age < 12
+    else if (filterAge === '12-14') matchAge = age >= 12 && age <= 14
+    else if (filterAge === '15-17') matchAge = age >= 15 && age <= 17
+    else if (filterAge === '18+') matchAge = age >= 18
 
     return matchAge && matchGender
   })
-
   function toggleAthlete(aid) {
     setSelected((prev) =>
       prev.includes(aid)
